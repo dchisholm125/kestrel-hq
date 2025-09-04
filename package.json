@@ -1,0 +1,41 @@
+{
+  "name": "gasshare-guardian",
+  "version": "1.0.0",
+  "description": "The GasShare Protocol's flagship Guardian module for assessing orders and profitable transactions.",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.ts",
+  "scripts": {
+  "test": "echo \"Error: no test specified\" && exit 1",
+  "test:unit": "mocha -r ts-node/register test/unit/**/*.spec.ts --exit",
+  "test:integration": "mocha -r ts-node/register test/integration/**/*.spec.ts --exit",
+  "compile:contracts": "ts-node scripts/compile-contracts.ts",
+  "lint": "eslint --ext .ts src",
+  "format": "prettier --write \"src/**/*.ts\"",
+  "build": "tsc -p tsconfig.json",
+  "test:connector": "node dist/scripts/connector-test.js"
+  },
+  "dependencies": {
+    "ethers": "^6.15.0",
+    "express": "^5.1.0",
+    "viem": "^2.37.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "mocha": "^10.2.0",
+    "chai": "^4.3.8",
+  "sinon": "^17.0.1",
+  "@types/sinon": "^10.0.20",
+  "solc": "^0.8.25",
+    "@types/mocha": "^10.0.1",
+    "@types/chai": "^4.3.4",
+    "ts-node": "^10.9.1",
+    "@types/express": "^5.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.42.0",
+    "@typescript-eslint/parser": "^8.42.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2"
+  }
+}

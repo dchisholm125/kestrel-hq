@@ -22,9 +22,10 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# Solidity artifacts
-*.json
-!contracts/*.sol
+# Solidity artifacts (keep sources, ignore compiled outputs)
+artifacts/
+cache/
+!contracts/**/*.sol
 
 # VSCode
 .vscode/
