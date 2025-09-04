@@ -36,16 +36,17 @@ describe('TradeCrafter (unit)', () => {
     console.log('[unit][TradeCrafter] Using reserves', { reserveWeth: reserveWeth.toString(), reserveToken: reserveToken.toString() });
 
     const mockProvider: any = {};
-    const crafter = new TradeCrafter(mockProvider, {
+  const executor = '0x9999999999999999999999999999999999999999';
+  const crafter = new TradeCrafter(mockProvider, {
       address: '0xpair',
       token0: WETH_ADDRESS,
       token1: TOKEN,
       reserve0: reserveWeth,
       reserve1: reserveToken
-    });
+  }, { [`${TOKEN.toLowerCase()}:${executor.toLowerCase()}`]: 10_000_000n * 10n ** 18n });
     console.log('[unit][TradeCrafter] Instantiated TradeCrafter with pair override');
 
-    const tx = await crafter.craftBackrun(opportunity);
+  const tx = await crafter.craftBackrun(opportunity, executor);
     console.log('[unit][TradeCrafter] craftBackrun returned', tx ? 'tx object' : 'null');
     expect(tx).not.toBeNull();
 
@@ -56,5 +57,32 @@ describe('TradeCrafter (unit)', () => {
     console.log('[unit][TradeCrafter] Expected fraction', expectedFraction.toString());
     expect(amountIn).toBe(expectedFraction);
     console.log('[unit][TradeCrafter] Assertion passed for amountIn fraction');
+  });
+
+  test('caps amountIn to wallet balance when heuristic exceeds balance', async () => {
+    console.log('[unit][TradeCrafter] Test start: caps amountIn to wallet balance');
+    // Reserves large, wallet balance tiny
+    const reserveWeth = 1_000_000n * 10n ** 18n;
+    const reserveToken = 2_000_000n * 10n ** 18n; // huge
+    const executor = '0x8888888888888888888888888888888888888888';
+    const smallBalance = 1_000n * 10n ** 18n; // only 1,000 tokens, heuristic would choose 0.1% of 2M = 2,000 > balance
+
+    const mockProvider: any = {};
+    const crafter = new TradeCrafter(mockProvider, {
+      address: '0xpair',
+      token0: WETH_ADDRESS,
+      token1: TOKEN,
+      reserve0: reserveWeth,
+      reserve1: reserveToken
+    }, { [`${TOKEN.toLowerCase()}:${executor.toLowerCase()}`]: smallBalance });
+
+    const tx = await crafter.craftBackrun(opportunity, executor);
+    expect(tx).not.toBeNull();
+    const decoded = iface.decodeFunctionData('swapExactTokensForTokens', tx!.data!);
+    const amountIn = decoded[0] as bigint;
+    const heuristic = (reserveToken * 10n) / 10000n; // 0.1% of reserveToken
+    expect(heuristic).toBeGreaterThan(smallBalance); // confirm test logic
+    expect(amountIn).toBe(smallBalance); // capped
+    console.log('[unit][TradeCrafter] Capped amountIn', amountIn.toString());
   });
 });

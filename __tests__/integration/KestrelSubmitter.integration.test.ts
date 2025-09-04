@@ -1,5 +1,5 @@
 import { KestrelSubmitter, KestrelSubmitterError } from '../../src/KestrelSubmitter';
-import { JsonRpcProvider, WebSocketProvider, Contract, parseEther } from 'ethers';
+import { JsonRpcProvider, WebSocketProvider, Contract, parseEther, MaxUint256 } from 'ethers';
 import { OnChainScanner } from '../../src/OnChainScanner';
 import { OpportunityIdentifier, WETH_ADDRESS } from '../../src/OpportunityIdentifier';
 import { TradeCrafter } from '../../src/TradeCrafter';
@@ -52,14 +52,21 @@ describe('KestrelSubmitter (integration)', () => {
     // Create a real swap on local anvil so TradeCrafter can craft a backrun tx
     const http = new JsonRpcProvider(HTTP_URL);
     const ws = new WebSocketProvider(WS_URL);
-    const signer = await http.getSigner(0);
+  const signer = await http.getSigner(0);
+  try {
 
     const weth = new Contract(WETH_ADDRESS, WETH_ABI, signer);
     const router = new Contract(ROUTER, ROUTER_ABI, signer);
 
-    // Ensure we have some WETH
-    const dep = await weth.deposit({ value: parseEther('1') });
-    await dep.wait();
+  // Ensure we have some WETH
+  const dep = await weth.deposit({ value: parseEther('1') });
+  await dep.wait();
+
+  // Approve the Uniswap router to spend WETH from the signer (prevents revert on token transfers)
+  console.log('[integration][KestrelSubmitter] approving router to spend WETH');
+  const approveTx = await weth.approve(ROUTER, MaxUint256);
+  await approveTx.wait();
+  console.log('[integration][KestrelSubmitter] approve mined', approveTx.hash);
 
     // perform a small swap to create an opportunity
     const path = [WETH_ADDRESS, USDC];
@@ -78,44 +85,59 @@ describe('KestrelSubmitter (integration)', () => {
     expect(opp).not.toBeNull();
 
     // craft a backrun tx (unsigned)
-    const crafter = new TradeCrafter(http);
-    const crafted = await crafter.craftBackrun(opp);
-    expect(crafted).not.toBeNull();
-
-    // Create an ephemeral Wallet, fund it, and sign the crafted tx locally
-    const { Wallet } = await import('ethers');
-    const ephemeral = Wallet.createRandom();
-    const walletConnected = ephemeral.connect(http as any);
-
-    // Fund ephemeral wallet from signer (anvil signer[0])
-    const fundTx = await signer.sendTransaction({ to: await walletConnected.getAddress(), value: parseEther('0.02') });
-    await fundTx.wait();
-
-    const chain = await http.getNetwork();
-    const nonce = await http.getTransactionCount(await walletConnected.getAddress());
-    const feeData = await http.getFeeData();
-    const txToSign: any = {
-      to: crafted!.to,
-      data: crafted!.data,
-      value: 0,
-      nonce,
-      chainId: chain.chainId,
-      gasLimit: 500000
-    };
-    if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
-      txToSign.maxFeePerGas = feeData.maxFeePerGas;
-      txToSign.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+    // Ensure signer has approved the tokenOut (USDC) to the router so the backrun can spend tokens
+    const ERC20_ABI = ['function approve(address,uint256) returns (bool)'];
+    try {
+      const tokenContract = new Contract(USDC, ERC20_ABI, signer);
+      console.log('[integration][KestrelSubmitter] approving router to spend tokenOut (USDC)');
+      const approveTokenTx = await tokenContract.approve(ROUTER, MaxUint256);
+      await approveTokenTx.wait();
+      console.log('[integration][KestrelSubmitter] token approve mined', approveTokenTx.hash);
+    } catch (err) {
+      console.log('[integration][KestrelSubmitter] token approve failed', err);
     }
 
-    const rawTx = await walletConnected.signTransaction(txToSign);
-    console.log('[integration][KestrelSubmitter] Submitting crafted raw tx to Guardian');
-  const result = await submitter.submitTrade(rawTx);
-  console.log('[integration][KestrelSubmitter] Guardian result', result);
-  expect(result.status).toBe('accepted');
+  const crafter = new TradeCrafter(http);
+  const crafted = await crafter.craftBackrun(opp, await signer.getAddress());
+    expect(crafted).not.toBeNull();
 
-  // cleanup providers
-  try { (ws as any)?.destroy?.(); } catch (_) {}
-  try { (http as any)?.destroy?.(); } catch (_) {}
+    // Sign the crafted tx using the unlocked signer (who owns the tokenOut from the swap)
+    const from = await signer.getAddress();
+    const chain = await http.getNetwork();
+    const nonce = await http.getTransactionCount(from);
+    const feeData = await http.getFeeData();
+    // Use fixed hex gas values to avoid BigInt serialization issues with eth_signTransaction
+    const txForSign: any = {
+      from,
+      to: crafted!.to,
+      data: crafted!.data,
+      value: '0x0',
+      nonce: `0x${nonce.toString(16)}`,
+      chainId: chain.chainId,
+      gas: '0x7a120', // 500000
+      maxFeePerGas: '0x59682f00', // 1_500_000_000 ~1.5 gwei
+      maxPriorityFeePerGas: '0x59682f00'
+    };
+
+  // Ensure chainId serialized as hex string to avoid BigInt issues
+  txForSign.chainId = `0x${BigInt(chain.chainId).toString(16)}`;
+    // Sign using the unlocked signer via signer.signTransaction which proxies correctly to the node
+    let rawTx: string;
+    try {
+      rawTx = await signer.signTransaction(txForSign as any);
+    } catch (e) {
+      throw new Error('signer.signTransaction failed: ' + String(e));
+    }
+
+    console.log('[integration][KestrelSubmitter] Submitting crafted raw tx to Guardian');
+    const result = await submitter.submitTrade(rawTx);
+    console.log('[integration][KestrelSubmitter] Guardian result', result);
+    expect(result.status).toBe('accepted');
+  } finally {
+    // cleanup providers to avoid Jest open handles
+    try { (ws as any)?.destroy?.(); } catch (_) {}
+    try { (http as any)?.destroy?.(); } catch (_) {}
+  }
   }, 60000);
 
   test('rejects a malformed raw transaction with a 400 error', async () => {
