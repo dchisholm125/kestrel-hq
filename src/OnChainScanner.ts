@@ -107,19 +107,63 @@ export class OnChainScanner extends EventEmitter {
   public async destroy(): Promise<void> {
     this.destroyed = true;
     this.clearReconnectTimer();
-    this.cleanupProvider();
+    await this.closeProvider();
     this.state.status = 'disconnected';
     this.emit('disconnected');
+  }
+  /** Lightweight graceful provider close preferring provider.destroy() if present */
+  private async closeProvider(timeoutMs = 2000): Promise<void> {
+    if (!this.provider) return;
+    const p = this.provider;
+    try {
+      // prefer provider.destroy() if implemented by ethers provider
+      const maybeDestroy = (p as any).destroy;
+      if (typeof maybeDestroy === 'function') {
+        try { await maybeDestroy.call(p); } catch (_) {}
+        this.provider = undefined;
+        return;
+      }
+
+      // otherwise perform a measured close: remove listeners, close/terminate ws, wait for close
+      try { p.removeAllListeners(); } catch (_) {}
+      // @ts-ignore
+      const ws = (p as any)._websocket as any | undefined;
+      if (ws) {
+        let closed = false;
+        const onClose = () => { closed = true; };
+        try { ws.addEventListener && ws.addEventListener('close', onClose); } catch (_) {}
+        try { ws.onclose = onClose; } catch (_) {}
+        try {
+          if (typeof ws.terminate === 'function') ws.terminate();
+          else if (typeof ws.close === 'function') ws.close();
+        } catch (_) {}
+
+        const start = Date.now();
+        while (!closed && Date.now() - start < timeoutMs) {
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 50));
+        }
+      }
+    } catch (_) {
+      // ignore
+    } finally {
+      try { p.removeAllListeners(); } catch (_) {}
+      this.provider = undefined;
+    }
   }
 
   private cleanupProvider() {
     if (this.provider) {
       try {
-        this.provider.removeAllListeners();
-        // @ts-ignore internal
-        const ws = (this.provider as any)._websocket as WebSocket | undefined;
-        if (ws && ws.readyState === 1 /* OPEN */) {
-          ws.close();
+        // remove high-level ethers listeners and close underlying socket if possible
+        try { this.provider.removeAllListeners(); } catch (_) {}
+        // @ts-ignore internal websocket
+        const ws = (this.provider as any)._websocket as any | undefined;
+        if (ws) {
+          try {
+            if (typeof ws.terminate === 'function') ws.terminate();
+            else if (typeof ws.close === 'function') ws.close();
+          } catch (_) {}
         }
       } catch (_) {
         // ignore
