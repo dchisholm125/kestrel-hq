@@ -109,7 +109,7 @@ describe('TransactionSimulator (unit)', () => {
   const res = await sim.analyze(raw)
   expect(res.decision).to.equal('REJECT')
   const rej = res as any
-  expect(rej.reason).to.equal('Unprofitable')
+  expect(rej.reason).to.equal('unprofitable')
   const keys = Object.keys(rej.deltas || {})
   expect(keys.length).to.be.greaterThan(0)
   const firstToken = keys[0]

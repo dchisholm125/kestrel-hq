@@ -1,8 +1,8 @@
 import express, { Request, Response } from 'express'
-import { ENV } from './config'
-import { validateSubmitBody } from './validators/submitValidator'
-import TransactionSimulator from './services/TransactionSimulator'
-import { pendingPool } from './services/PendingPool'
+import { ENV } from './config.js'
+import { validateSubmitBody } from './validators/submitValidator.js'
+import TransactionSimulator from './services/TransactionSimulator.js'
+import { pendingPool } from './services/PendingPool.js'
 
 const app = express()
 const port = ENV.API_SERVER_PORT || ENV.PORT || 3000
@@ -151,7 +151,11 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
 })
 
 // Only start server when this file is executed directly. Export app for tests.
-if (require.main === module) {
+// In CommonJS, use require.main === module
+// (Previously used import.meta.url guard when module=NodeNext)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const isDirectRun = typeof require !== 'undefined' && (require as any).main === module
+if (isDirectRun) {
   app.listen(port, () => {
     console.log(`Server running on port ${port}`)
   })
