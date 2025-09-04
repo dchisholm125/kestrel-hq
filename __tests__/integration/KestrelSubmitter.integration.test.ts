@@ -109,53 +109,9 @@ describe('KestrelSubmitter (integration)', () => {
 
     const rawTx = await walletConnected.signTransaction(txToSign);
     console.log('[integration][KestrelSubmitter] Submitting crafted raw tx to Guardian');
-    try {
-      const result = await submitter.submitTrade(rawTx);
-      console.log('[integration][KestrelSubmitter] Guardian result', result);
-      expect(result.status).toBe('accepted');
-    } catch (err: any) {
-      // If the live Guardian rejects (e.g., strict validation), fall back to a local mock server
-      if (err?.statusCode === 400) {
-        console.log('[integration][KestrelSubmitter] Guardian rejected crafted tx; falling back to local mock to validate submitter behavior');
-        const httpServer = await new Promise<any>((resolve, reject) => {
-          const http = require('http');
-          const srv = http.createServer(async (req: any, res: any) => {
-            if (req.method === 'POST' && req.url === '/submit-tx') {
-              let body = '';
-              req.on('data', (c: any) => body += c);
-              req.on('end', () => {
-                try {
-                  const parsed = JSON.parse(body || '{}');
-                  if (parsed && parsed.rawTransaction) {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ status: 'accepted', txHash: '0xmock' }));
-                    return;
-                  }
-                } catch (_) {}
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ message: 'bad' }));
-              });
-              return;
-            }
-            res.writeHead(404);
-            res.end();
-          });
-          srv.listen(0, () => resolve(srv));
-          srv.on('error', reject);
-        });
-        const mockPort = (httpServer.address() as any).port;
-        const mockUrl = `http://127.0.0.1:${mockPort}`;
-        const mockSubmitter = new (await import('../../src/KestrelSubmitter')).KestrelSubmitter(mockUrl, 2000);
-        try {
-          const mockResult = await mockSubmitter.submitTrade(rawTx);
-          expect(mockResult.status).toBe('accepted');
-        } finally {
-          httpServer.close();
-        }
-      } else {
-        throw err;
-      }
-    }
+  const result = await submitter.submitTrade(rawTx);
+  console.log('[integration][KestrelSubmitter] Guardian result', result);
+  expect(result.status).toBe('accepted');
 
   // cleanup providers
   try { (ws as any)?.destroy?.(); } catch (_) {}
