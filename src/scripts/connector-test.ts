@@ -4,7 +4,7 @@ import NodeConnector from '../services/NodeConnector'
   try {
     const nc = NodeConnector.getInstance()
     const provider = await nc.getProvider()
-    console.log('Provider connected, chainId:', await provider.getNetwork().then(n => n.chainId))
+  console.log('Provider connected, chainId:', await provider.getNetwork().then((n: { chainId: bigint }) => n.chainId))
     const unsub = nc.subscribeToNewBlocks()
 
     console.log('Subscribed to new blocks for 5s...')

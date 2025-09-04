@@ -17,6 +17,7 @@ describe('BundleSigner integration', function () {
   let batchExecutorAddress: string
   let app: express.Application
   let server: any
+  let apiPort: number | undefined
 
   before(async () => {
     // Setup provider and deployer
@@ -47,9 +48,9 @@ describe('BundleSigner integration', function () {
     })
     await fundingTx.wait()
 
-    // Setup express app for submitting trades
-    app = express()
-    app.use(express.json())
+  // Setup express app for submitting trades (ephemeral port to avoid collisions with main service)
+  app = express()
+  app.use(express.json())
     
     app.post('/submit-tx', (req, res) => {
       try {
@@ -81,7 +82,12 @@ describe('BundleSigner integration', function () {
       }
     })
 
-    server = app.listen(ENV.API_SERVER_PORT || 4000)
+    // Listen on ephemeral port (0) to avoid EADDRINUSE with other tests / running service
+    await new Promise<void>(resolve => {
+      server = app.listen(0, () => resolve())
+    })
+    apiPort = (server.address() as any).port
+    console.info(`[BundleSigner Test] Test API listening on port ${apiPort}`)
   })
 
   after(async () => {
