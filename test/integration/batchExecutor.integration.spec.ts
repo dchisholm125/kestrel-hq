@@ -7,7 +7,7 @@ import { ENV } from '../../src/config'
 describe('BatchExecutor integration (deploy + execute)', function () {
   this.timeout(20000)
   let provider: ethers.JsonRpcProvider
-  let wallet: ethers.Wallet
+  let wallet: any
   let batchAddress: string
   let mockAddress: string
   let batchAbi: any
@@ -15,8 +15,8 @@ describe('BatchExecutor integration (deploy + execute)', function () {
 
   before(async () => {
     provider = new ethers.JsonRpcProvider(ENV.RPC_URL)
-    const pk = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
-    wallet = new ethers.Wallet(pk, provider)
+  // Use the node's first unlocked signer to avoid nonce/state mismatches with the external PK
+  wallet = await (provider.getSigner(0) as any)
 
     // Read artifacts
     const batchArtifact = JSON.parse(fs.readFileSync(path.join(__dirname, '../../build/BatchExecutor.json'), 'utf8'))
@@ -38,8 +38,8 @@ describe('BatchExecutor integration (deploy + execute)', function () {
   })
 
   it('executes a batch of calls successfully', async () => {
-    const mock = new ethers.Contract(mockAddress, mockAbi, wallet)
-    const batch = new ethers.Contract(batchAddress, batchAbi, wallet)
+  const mock = new ethers.Contract(mockAddress, mockAbi, wallet)
+  const batch = new ethers.Contract(batchAddress, batchAbi, wallet)
 
     const incData = mock.interface.encodeFunctionData('increment')
     const setValueData = mock.interface.encodeFunctionData('setValue', [42])

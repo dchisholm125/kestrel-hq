@@ -40,4 +40,9 @@ contract BatchExecutor {
         }
         emit BatchExecuted(length, startGas - gasleft());
     }
+
+    /**
+     * @dev Allow the contract to receive ETH
+     */
+    receive() external payable {}
 }
