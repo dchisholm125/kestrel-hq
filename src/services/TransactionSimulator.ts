@@ -25,7 +25,21 @@ export type SimulationAccept = {
   netProfitWei: string
   txHash: string
 }
-export type SimulationReject = { decision: 'REJECT'; reason: string; debug: Record<string, unknown>; grossProfitWei?: string; gasCostWei?: string; netProfitWei?: string; balancesBefore?: TokenBalanceMap; balancesAfter?: TokenBalanceMap; deltas?: TokenDeltaMap; grossProfit?: TokenDeltaMap; txHash?: string }
+export type SimulationReject = {
+  decision: 'REJECT'
+  reason: string
+  debug: Record<string, unknown>
+  /** Detailed revert string or parse error message when available */
+  revertMessage?: string
+  grossProfitWei?: string
+  gasCostWei?: string
+  netProfitWei?: string
+  balancesBefore?: TokenBalanceMap
+  balancesAfter?: TokenBalanceMap
+  deltas?: TokenDeltaMap
+  grossProfit?: TokenDeltaMap
+  txHash?: string
+}
 export type SimulationResult = SimulationAccept | SimulationReject
 
 /**
@@ -65,8 +79,9 @@ class TransactionSimulator {
 
     // Basic validation of raw hex
     if (!/^0x[0-9a-fA-F]+$/.test(raw)) {
-      pushStep('invalid hex input')
-      return { decision: 'REJECT', reason: 'invalid raw hex', debug }
+      const msg = 'raw transaction must be 0x-prefixed hex'
+      pushStep('invalid hex input', { msg })
+      return { decision: 'REJECT', reason: 'invalid_raw_hex', revertMessage: msg, debug }
     }
 
     let parsed: ethers.TransactionLike | null = null
@@ -84,8 +99,9 @@ class TransactionSimulator {
         hash: txHash
       })
     } catch (e) {
-      pushStep('parse failure', { error: (e as Error).message })
-      return { decision: 'REJECT', reason: 'parse_error', debug }
+      const parseMsg = (e as Error).message
+      pushStep('parse failure', { error: parseMsg })
+      return { decision: 'REJECT', reason: 'parse_error', revertMessage: parseMsg, debug }
     }
 
     // Acquire provider through NodeConnector (already handling reconnect logic)
@@ -94,8 +110,9 @@ class TransactionSimulator {
       provider = await NodeConnector.getInstance().getProvider()
       pushStep('got provider', { providerOk: !!provider })
     } catch (e) {
-      pushStep('provider acquisition failed', { error: (e as Error).message })
-      return { decision: 'REJECT', reason: 'no_provider', debug }
+      const errMsg = (e as Error).message
+      pushStep('provider acquisition failed', { error: errMsg })
+      return { decision: 'REJECT', reason: 'no_provider', revertMessage: errMsg, debug }
     }
 
     // Build call object
@@ -118,8 +135,9 @@ class TransactionSimulator {
       }
       pushStep('constructed call object', { callObj })
     } catch (e) {
-      pushStep('failed constructing call object', { error: (e as Error).message })
-      return { decision: 'REJECT', reason: 'call_obj_error', debug }
+      const errMsg = (e as Error).message
+      pushStep('failed constructing call object', { error: errMsg })
+      return { decision: 'REJECT', reason: 'call_obj_error', revertMessage: errMsg, debug }
     }
 
     // Identify from address for balance tracking
@@ -164,7 +182,7 @@ class TransactionSimulator {
         result = await provider.send('eth_call', [callObj, 'latest'])
       } else {
         pushStep('provider lacks call/send')
-        return { decision: 'REJECT', reason: 'unsupported_provider', debug, txHash: txHash || undefined }
+    return { decision: 'REJECT', reason: 'unsupported_provider', revertMessage: 'Provider lacks call/send interface', debug, txHash: txHash || undefined }
       }
       callSucceeded = true
       pushStep('eth_call success', { returnDataPreview: String(result).slice(0, 20) })
@@ -173,15 +191,15 @@ class TransactionSimulator {
       const errObj: Record<string, unknown> = {
         message: (e as Error).message
       }
-      // Some providers attach 'error' or 'data'
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const anyE = e as any
       if (anyE?.code) errObj.code = anyE.code
       if (anyE?.reason) errObj.reason = anyE.reason
       if (anyE?.error?.message) errObj.innerMessage = anyE.error.message
       if (anyE?.data) errObj.data = anyE.data
-      pushStep('eth_call revert/failure', errObj)
-      return { decision: 'REJECT', reason: 'revert', debug, txHash: txHash || undefined }
+      const revertMessage = (anyE?.reason || anyE?.error?.message || (e as Error).message) as string
+      pushStep('eth_call revert/failure', { ...errObj, revertMessage })
+      return { decision: 'REJECT', reason: 'revert', revertMessage, debug, txHash: txHash || undefined }
     }
 
   // Heuristic post-state diff (since chain not mutated by eth_call). We attempt to infer token balance deltas.
@@ -271,7 +289,7 @@ class TransactionSimulator {
       netProfitWei = computeNetProfit(grossProfitWei, gasCostWei)
       pushStep('profit computed', { grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString() })
       if (netProfitWei <= 0n) {
-        return { decision: 'REJECT', reason: 'Unprofitable', debug, balancesBefore, balancesAfter, deltas, grossProfit, grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString(), txHash: txHash || undefined }
+  return { decision: 'REJECT', reason: 'unprofitable', revertMessage: 'Net profit less than or equal to zero after gas', debug, balancesBefore, balancesAfter, deltas, grossProfit, grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString(), txHash: txHash || undefined }
       }
     } else {
       pushStep('no gross profit detected')

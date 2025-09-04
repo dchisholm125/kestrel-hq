@@ -66,7 +66,83 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
         }
         return res.status(200).json({ id, status: 'accepted', simulation: 'ACCEPT', grossProfit: (simRes as any).grossProfit, grossProfitWei: (simRes as any).grossProfitWei, gasCostWei: (simRes as any).gasCostWei, netProfitWei: (simRes as any).netProfitWei, deltas: (simRes as any).deltas, txHash: (simRes as any).txHash })
       }
-      return res.status(400).json({ id, status: 'rejected', simulation: 'REJECT', reason: simRes.reason, grossProfitWei: (simRes as any).grossProfitWei, gasCostWei: (simRes as any).gasCostWei, netProfitWei: (simRes as any).netProfitWei, txHash: (simRes as any).txHash })
+      // Map internal reason to external code + human message + suggestion
+      const internalReason = (simRes as any).reason as string
+      const revertMessage = (simRes as any).revertMessage as string | undefined
+      const txHash = (simRes as any).txHash
+      const codeMap: Record<string, { rejectionCode: string; rejectionReason: string; suggestion?: string }> = {
+        revert: {
+          rejectionCode: 'SIMULATION_REVERT',
+          rejectionReason: 'The transaction reverted during simulation.',
+          suggestion: revertMessage && revertMessage.includes('TRANSFER_FROM_FAILED')
+            ? 'Check ERC20 allowance and balance for the token involved.'
+            : 'Inspect revertMessage and underlying contract logic.'
+        },
+        parse_error: {
+          rejectionCode: 'PARSE_ERROR',
+          rejectionReason: 'The raw transaction could not be parsed.',
+          suggestion: 'Ensure the rawTransaction is a signed, serialized transaction (0x-prefixed hex).'
+        },
+        invalid_raw_hex: {
+          rejectionCode: 'INVALID_RAW_HEX',
+          rejectionReason: 'The rawTransaction field is not valid hex.',
+          suggestion: 'Provide a 0x-prefixed, even-length hex string.'
+        },
+        call_obj_error: {
+          rejectionCode: 'CALL_OBJECT_ERROR',
+          rejectionReason: 'Failed to construct call object for simulation.',
+          suggestion: 'Verify the transaction fields (to, data, value, gas parameters).'
+        },
+        unsupported_provider: {
+          rejectionCode: 'UNSUPPORTED_PROVIDER',
+          rejectionReason: 'Underlying provider does not support eth_call.',
+          suggestion: 'Use a compatible JSON-RPC endpoint with eth_call support.'
+        },
+        no_provider: {
+          rejectionCode: 'NO_PROVIDER',
+          rejectionReason: 'Could not acquire a blockchain provider.',
+          suggestion: 'Confirm RPC_URL is reachable and node is running.'
+        },
+        unprofitable: {
+          rejectionCode: 'UNPROFITABLE',
+          rejectionReason: 'Net profit was not positive after gas.',
+          suggestion: 'Submit only transactions with higher expected gross profit.'
+        }
+      }
+
+      const mapped = codeMap[internalReason] || {
+        rejectionCode: 'UNKNOWN_REJECTION',
+        rejectionReason: 'The transaction was rejected for an unknown reason.',
+        suggestion: 'Check simulation debug steps.'
+      }
+
+      // Enhanced logging with full context
+      console.warn('[submit-tx] Guardian REJECTED submission', {
+        id,
+        internalReason,
+        rejectionCode: mapped.rejectionCode,
+        rejectionReason: mapped.rejectionReason,
+        revertMessage,
+        txHash,
+        requestBody: body,
+        grossProfitWei: (simRes as any).grossProfitWei,
+        gasCostWei: (simRes as any).gasCostWei,
+        netProfitWei: (simRes as any).netProfitWei
+      })
+
+      const errorPayload = {
+        id,
+        status: 'rejected',
+        rejectionCode: mapped.rejectionCode,
+        rejectionReason: mapped.rejectionReason,
+        revertMessage: revertMessage || null,
+        suggestion: mapped.suggestion,
+        txHash,
+        grossProfitWei: (simRes as any).grossProfitWei,
+        gasCostWei: (simRes as any).gasCostWei,
+        netProfitWei: (simRes as any).netProfitWei
+      }
+      return res.status(400).json(errorPayload)
     } catch (e) {
       console.error('[submit-tx] simulation failed', e)
       return res.status(500).json({ error: 'simulation failed' })
