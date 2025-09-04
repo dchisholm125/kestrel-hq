@@ -7,7 +7,7 @@ interface MockProvider {
 }
 
 describe('OpportunityIdentifier (unit)', () => {
-  console.log('[unit] OpportunityIdentifier unit tests starting');
+  console.log('[unit][OpportunityIdentifier] Suite start');
   const makeProvider = (tx: any | null): MockProvider => ({
     getTransaction: jest.fn().mockResolvedValue(tx)
   });
@@ -17,6 +17,7 @@ describe('OpportunityIdentifier (unit)', () => {
   ]);
 
   test('identifies a Uniswap V2 swapExactETHForTokens opportunity', async () => {
+    console.log('[unit][OpportunityIdentifier] Test start: identifies swapExactETHForTokens');
     const dummyHash = '0xhash1';
 
   console.log('[unit] preparing mock swapExactETHForTokens transaction for hash', dummyHash);
@@ -47,9 +48,11 @@ describe('OpportunityIdentifier (unit)', () => {
     expect(result?.hash).toBe(dummyHash);
     expect(result?.path).toEqual(path);
     expect(result?.amountInWei).toBe(mockTx.value);
+    console.log('[unit][OpportunityIdentifier] Assertions passed for positive identification');
   });
 
   test('returns null for non-swap transaction', async () => {
+    console.log('[unit][OpportunityIdentifier] Test start: returns null for non-swap');
     const dummyHash = '0xhash2';
     const mockTx = {
       hash: dummyHash,
@@ -65,5 +68,6 @@ describe('OpportunityIdentifier (unit)', () => {
   const result = await oi.analyzeTransaction(dummyHash);
   console.log('[unit] analyzeTransaction result for non-swap:', result);
   expect(result).toBeNull();
+  console.log('[unit][OpportunityIdentifier] Assertion passed for null case');
   });
 });

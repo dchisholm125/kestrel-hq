@@ -15,6 +15,7 @@ import { OpportunityIdentifier, WETH_ADDRESS } from '../../src/OpportunityIdenti
 //   - Listen for pending tx via OnChainScanner and verify OpportunityIdentifier classifies it.
 
 describe('OpportunityIdentifier deterministic Uniswap V2 swap (integration)', () => {
+  console.log('[integration][OpportunityIdentifier] Suite start');
   const WS_URL = 'ws://127.0.0.1:8545';
   const HTTP_URL = 'http://127.0.0.1:8545';
   const UNISWAP_V2_ROUTER = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
@@ -37,6 +38,7 @@ describe('OpportunityIdentifier deterministic Uniswap V2 swap (integration)', ()
   let identifier: OpportunityIdentifier;
 
   beforeAll(async () => {
+    console.log('[integration][OpportunityIdentifier] beforeAll: probing node');
     try {
       httpProvider = new JsonRpcProvider(HTTP_URL);
       wsProvider = new WebSocketProvider(WS_URL);
@@ -60,26 +62,27 @@ describe('OpportunityIdentifier deterministic Uniswap V2 swap (integration)', ()
   });
 
   test('detects programmatically created swapExactETHForTokens', async () => {
+    console.log('[integration][OpportunityIdentifier] Test start: detects programmatically created swap');
     if (!reachable) {
       console.log('[integration] skipped - node unreachable');
       return;
     }
 
-    console.log('[integration] starting deterministic swap test');
+  console.log('[integration][OpportunityIdentifier] starting deterministic swap test');
     const weth = new Contract(WETH_ADDRESS, WETH_ABI, signer);
     const router = new Contract(UNISWAP_V2_ROUTER, ROUTER_ABI, signer);
 
     // 1. Deposit 1 ETH -> WETH
-    console.log('[integration] depositing 1 ETH to WETH');
+  console.log('[integration][OpportunityIdentifier] depositing 1 ETH to WETH');
     const depositTx = await weth.deposit({ value: parseEther('1') });
     await depositTx.wait();
-    console.log('[integration] deposit mined', depositTx.hash);
+  console.log('[integration][OpportunityIdentifier] deposit mined', depositTx.hash);
 
     // 2. Approve router to spend WETH (not needed for swapExactETHForTokens but per spec)
-    console.log('[integration] approving router for WETH');
+  console.log('[integration][OpportunityIdentifier] approving router for WETH');
     const approveTx = await weth.approve(UNISWAP_V2_ROUTER, MaxUint256);
     await approveTx.wait();
-    console.log('[integration] approve mined', approveTx.hash);
+  console.log('[integration][OpportunityIdentifier] approve mined', approveTx.hash);
 
     // Prepare to capture opportunity
   let expectedHash: string | undefined;
@@ -124,7 +127,7 @@ describe('OpportunityIdentifier deterministic Uniswap V2 swap (integration)', ()
     });
 
     // 3. Execute swapExactETHForTokens (ETH -> USDC). This will emit pending hash.
-    console.log('[integration] sending swapExactETHForTokens tx');
+  console.log('[integration][OpportunityIdentifier] sending swapExactETHForTokens tx');
   const swapTx = await router.swapExactETHForTokens(
       amountOutMin,
       path,
@@ -133,10 +136,10 @@ describe('OpportunityIdentifier deterministic Uniswap V2 swap (integration)', ()
       { value: parseEther(ethToSwap) }
     );
     expectedHash = swapTx.hash;
-    console.log('[integration] swap tx sent hash', expectedHash);
+  console.log('[integration][OpportunityIdentifier] swap tx sent hash', expectedHash);
 
     const opportunity = await opportunityPromise;
-    console.log('[integration] opportunity detected', opportunity);
+  console.log('[integration][OpportunityIdentifier] opportunity detected', opportunity);
 
     expect(opportunity).toBeTruthy();
     expect(opportunity.hash).toBe(expectedHash);

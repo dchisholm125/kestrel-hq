@@ -3,6 +3,7 @@ import { WebSocketProvider, JsonRpcProvider } from 'ethers';
 
 // Integration test: auto-detect local Anvil node on 127.0.0.1:8545 and run only if reachable.
 describe('OnChainScanner (integration)', () => {
+  console.log('[integration][OnChainScanner] Suite start');
   const WS_URL = 'ws://127.0.0.1:8545';
   const HTTP_URL = 'http://127.0.0.1:8545';
   let reachable = false;
@@ -29,6 +30,7 @@ describe('OnChainScanner (integration)', () => {
   });
 
   test('detects a mined block', async () => {
+    console.log('[integration][OnChainScanner] Test start: detects a mined block');
     if (!reachable) {
       console.log('[integration] skipping test because local node is not reachable');
       return;

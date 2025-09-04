@@ -23,6 +23,7 @@ jest.mock('ethers', () => {
 });
 
 describe('OnChainScanner (unit)', () => {
+  console.log('[unit][OnChainScanner] Suite start');
   const DUMMY_URL = 'ws://dummy';
 
   beforeEach(async () => {
@@ -42,6 +43,7 @@ describe('OnChainScanner (unit)', () => {
   });
 
   test('emits newBlock when provider emits block', async () => {
+    console.log('[unit][OnChainScanner] Test start: emits newBlock');
     const scanner = OnChainScanner.instance;
     const spy = jest.fn();
     scanner.on('newBlock', spy);
@@ -61,6 +63,7 @@ describe('OnChainScanner (unit)', () => {
   });
 
   test('emits pendingTransaction when provider emits pending', async () => {
+    console.log('[unit][OnChainScanner] Test start: emits pendingTransaction');
     const scanner = OnChainScanner.instance;
     const spy = jest.fn();
     scanner.on('pendingTransaction', spy);
