@@ -14,6 +14,6 @@ export const ENV = {
 }
 
 export const CONSTANTS = {
-  APP_NAME: 'GasShare Guardian',
+  APP_NAME: 'Kestrel Protocol',
   // Add more constants as needed
 }

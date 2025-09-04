@@ -1,7 +1,7 @@
 {
-  "name": "gasshare-guardian",
+  "name": "kestrel-protocol",
   "version": "1.0.0",
-  "description": "The GasShare Protocol's flagship Guardian module for assessing orders and profitable transactions.",
+  "description": "The Kestrel Protocol's flagship Guardian module for assessing orders and profitable transactions.",
   "license": "ISC",
   "author": "",
   "type": "commonjs",

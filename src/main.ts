@@ -1,5 +1,5 @@
 /*
- * Application entry point (ignition switch) for Kestrel-Protocol / GasShare Guardian
+ * Application entry point (ignition switch) for Kestrel-Protocol / Kestrel Protocol
  *
  * Responsibilities:
  *  1. Initialize core singletons (NodeConnector, PendingPool, BatchingEngine)

@@ -12,7 +12,7 @@ app.get('/health', (_req: Request, res: Response) => {
 })
 
 app.get('/', (req: Request, res: Response) => {
-  res.send('Hello, GasShare Guardian!')
+  res.send('Hello, Kestrel Protocol!')
 })
 
 // parse JSON bodies
