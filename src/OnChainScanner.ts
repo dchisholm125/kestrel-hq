@@ -1,0 +1,164 @@
+import { EventEmitter } from 'events';
+import { WebSocketProvider } from 'ethers';
+
+export type OnChainScannerEvents =
+  | { type: 'newBlock'; blockNumber: number }
+  | { type: 'pendingTransaction'; txHash: string }
+  | { type: 'connected' }
+  | { type: 'disconnected'; reason?: any }
+  | { type: 'error'; error: Error }
+  | { type: 'reconnecting'; attempt: number }
+  | { type: 'reconnected'; attempt: number };
+
+interface ConnectionState {
+  status: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'reconnecting';
+  attempts: number;
+  url?: string;
+}
+
+/**
+ * OnChainScanner is a singleton responsible for listening to chain events
+ * (new blocks and pending transactions) and re-emitting them in a typed, SDK-friendly way.
+ */
+export class OnChainScanner extends EventEmitter {
+  private static _instance: OnChainScanner;
+  private provider?: WebSocketProvider; // Ethers v6 WebSocketProvider
+  private state: ConnectionState = { status: 'idle', attempts: 0 };
+  private reconnectTimer?: NodeJS.Timeout;
+  private destroyed = false;
+  private maxReconnectDelayMs = 30_000;
+  private baseReconnectDelayMs = 1_000;
+
+  private constructor() {
+    super();
+  }
+
+  public static get instance(): OnChainScanner {
+    if (!this._instance) {
+      this._instance = new OnChainScanner();
+    }
+    return this._instance;
+  }
+
+  /**
+   * Connect to a websocket endpoint. If already connected to same URL, no-op.
+   */
+  public async connect(url: string): Promise<void> {
+    if (this.destroyed) {
+      throw new Error('OnChainScanner has been destroyed');
+    }
+    if (this.provider && this.state.status === 'connected' && this.state.url === url) {
+      return; // already connected
+    }
+
+    await this.establishConnection(url);
+  }
+
+  private async establishConnection(url: string) {
+    this.cleanupProvider();
+    this.state = { status: 'connecting', attempts: 0, url };
+
+    try {
+      this.provider = new WebSocketProvider(url);
+      // attach listeners
+      this.provider.on('block', (blockNumber: number) => {
+  this.emit('newBlock', blockNumber);
+      });
+
+      this.provider.on('pending', (txHash: string) => {
+  this.emit('pendingTransaction', txHash);
+      });
+
+      // Ethers v6: provider._websocket may not be public; we rely on events for error/close.
+      // We'll attach generic listeners if available (best-effort) for disconnect detection.
+      // @ts-ignore - accessing internal
+      const ws = (this.provider as any)._websocket as WebSocket | undefined;
+      if (ws) {
+        ws.addEventListener('close', (ev: any) => {
+          this.handleDisconnect(ev);
+        });
+        ws.addEventListener('error', (err: any) => {
+          this.emit('error', new Error('WebSocket error')); // propagate generic error
+          this.handleDisconnect(err);
+        });
+        ws.addEventListener('open', () => {
+          this.state.status = 'connected';
+          this.emit('connected');
+        });
+      } else {
+        // If we can't hook into low-level ws, assume immediate success after first call to get block number
+        this.state.status = 'connected';
+        this.emit('connected');
+      }
+
+      // Probe connectivity (optional): fetch current block number; if fails triggers catch
+      await this.provider.getBlockNumber();
+      if (this.state.status !== 'connected') {
+        this.state.status = 'connected';
+        this.emit('connected');
+      }
+    } catch (err: any) {
+      this.emit('error', err instanceof Error ? err : new Error(String(err)));
+      this.handleDisconnect(err);
+    }
+  }
+
+  /** Gracefully disconnect and stop any reconnection attempts. */
+  public async destroy(): Promise<void> {
+    this.destroyed = true;
+    this.clearReconnectTimer();
+    this.cleanupProvider();
+    this.state.status = 'disconnected';
+    this.emit('disconnected');
+  }
+
+  private cleanupProvider() {
+    if (this.provider) {
+      try {
+        this.provider.removeAllListeners();
+        // @ts-ignore internal
+        const ws = (this.provider as any)._websocket as WebSocket | undefined;
+        if (ws && ws.readyState === 1 /* OPEN */) {
+          ws.close();
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+    this.provider = undefined;
+  }
+
+  private handleDisconnect(reason?: any) {
+    if (this.destroyed) return;
+    if (this.state.status === 'reconnecting') return; // already handling
+    this.emit('disconnected', reason);
+    this.scheduleReconnect();
+  }
+
+  private scheduleReconnect() {
+    if (!this.state.url) return;
+    this.state.status = 'reconnecting';
+    const attempt = ++this.state.attempts;
+    const delay = Math.min(this.baseReconnectDelayMs * 2 ** (attempt - 1), this.maxReconnectDelayMs);
+    this.emit('reconnecting', attempt);
+    this.clearReconnectTimer();
+    this.reconnectTimer = setTimeout(async () => {
+      if (this.destroyed) return;
+      try {
+        await this.establishConnection(this.state.url!);
+        this.emit('reconnected', attempt);
+      } catch (err) {
+        // failure will cascade to another schedule
+      }
+    }, delay);
+  }
+
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+  }
+}
+
+export default OnChainScanner.instance;
