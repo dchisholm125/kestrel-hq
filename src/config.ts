@@ -9,7 +9,11 @@ export const ENV = {
   PORT: process.env.PORT ? Number(process.env.PORT) : 3000,
   RPC_URL: process.env.RPC_URL || 'http://127.0.0.1:8545',
   API_SERVER_PORT: process.env.API_SERVER_PORT ? Number(process.env.API_SERVER_PORT) : 4000,
-  ARB_SENTINEL: process.env.ARB_SENTINEL || ''
+  ARB_SENTINEL: process.env.ARB_SENTINEL || '',
+  FLASHBOTS_RELAY_URL: process.env.FLASHBOTS_RELAY_URL || 'https://relay.flashbots.net',
+  FLASHBOTS_SIGNING_KEY: process.env.FLASHBOTS_SIGNING_KEY || '',
+  BLOXROUTE_RELAY_URL: process.env.BLOXROUTE_RELAY_URL || 'https://blox.example',
+  BLOXROUTE_AUTH: process.env.BLOXROUTE_AUTH || ''
   // Add more environment variables as needed
 }
 
