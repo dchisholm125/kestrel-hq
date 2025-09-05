@@ -79,7 +79,7 @@ describe('TradeCrafter (integration)', () => {
     expect(opp).not.toBeNull();
     console.log('[integration][TradeCrafter] Opportunity detected');
 
-    const crafted = await crafter.craftBackrun(opp!);
+    const crafted = await crafter.craftBackrun(opp!, await signer.getAddress());
     console.log('[integration][TradeCrafter] craftBackrun result', crafted ? 'tx object' : 'null');
     expect(crafted).not.toBeNull();
   expect(((crafted!.to as string) || '').toLowerCase()).toBe('0x7a250d5630b4cf539739df2c5dacb4c659f2488d');

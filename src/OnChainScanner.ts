@@ -44,63 +44,129 @@ export class OnChainScanner extends EventEmitter {
    * Connect to a websocket endpoint. If already connected to same URL, no-op.
    */
   public async connect(url: string): Promise<void> {
+    console.log('[OnChainScanner] connect called with URL:', url)
     if (this.destroyed) {
+      console.log('[OnChainScanner] destroyed, throwing error')
       throw new Error('OnChainScanner has been destroyed');
     }
     if (this.provider && this.state.status === 'connected' && this.state.url === url) {
+      console.log('[OnChainScanner] already connected to same URL, returning early')
       return; // already connected
     }
 
+    console.log('[OnChainScanner] calling establishConnection')
     await this.establishConnection(url);
   }
 
   private async establishConnection(url: string) {
+    console.log('[OnChainScanner] establishConnection called with URL:', url)
     this.cleanupProvider();
     this.state = { status: 'connecting', attempts: 0, url };
 
-    try {
-      this.provider = new WebSocketProvider(url);
-      // attach listeners
-      this.provider.on('block', (blockNumber: number) => {
-  this.emit('newBlock', blockNumber);
-      });
+    return new Promise<void>((resolve, reject) => {
+      try {
+        // Check if this is our custom broadcaster URL
+        console.log('[OnChainScanner] Checking URL:', url)
+        if (url.includes('127.0.0.1:8546') || url.includes('localhost:8546')) {
+          console.log('[OnChainScanner] Using custom broadcaster WebSocket connection')
+          // Use WebSocket directly for our custom broadcaster
+          try {
+            const WebSocket = require('ws');
+            const ws = new WebSocket(url);
 
-      this.provider.on('pending', (txHash: string) => {
-  this.emit('pendingTransaction', txHash);
-      });
+            ws.on('open', () => {
+              console.log('[OnChainScanner] WebSocket connected to broadcaster');
+              this.state.status = 'connected';
+              this.emit('connected');
+              resolve();
+            });
 
-      // Ethers v6: provider._websocket may not be public; we rely on events for error/close.
-      // We'll attach generic listeners if available (best-effort) for disconnect detection.
-      // @ts-ignore - accessing internal
-      const ws = (this.provider as any)._websocket as WebSocket | undefined;
-      if (ws) {
-        ws.addEventListener('close', (ev: any) => {
-          this.handleDisconnect(ev);
-        });
-        ws.addEventListener('error', (err: any) => {
-          this.emit('error', new Error('WebSocket error')); // propagate generic error
-          this.handleDisconnect(err);
-        });
-        ws.addEventListener('open', () => {
-          this.state.status = 'connected';
-          this.emit('connected');
-        });
-      } else {
-        // If we can't hook into low-level ws, assume immediate success after first call to get block number
-        this.state.status = 'connected';
-        this.emit('connected');
+            ws.on('message', (data: Buffer) => {
+              try {
+                const message = JSON.parse(data.toString());
+                console.log('[OnChainScanner] received message:', message.type)
+                if (message.type === 'block') {
+                  console.log('[OnChainScanner] emitting newBlock:', message.blockNumber)
+                  this.emit('newBlock', message.blockNumber);
+                } else if (message.type === 'pending') {
+                  console.log('[OnChainScanner] emitting pendingTransaction:', message.txHash)
+                  this.emit('pendingTransaction', message.txHash);
+                }
+              } catch (err) {
+                console.error('[OnChainScanner] error parsing message:', err)
+              }
+            });
+
+            ws.on('close', () => {
+              console.log('[OnChainScanner] WebSocket closed')
+              this.handleDisconnect();
+            });
+
+            ws.on('error', (err: any) => {
+              console.error('[OnChainScanner] WebSocket error:', err.message);
+              this.emit('error', new Error('WebSocket error'));
+              this.handleDisconnect(err);
+              reject(err);
+            });
+
+          } catch (err) {
+            console.error('[OnChainScanner] failed to load ws package:', err);
+            reject(new Error('ws package not available'));
+          }
+        } else {
+          console.log('[OnChainScanner] Using standard WebSocketProvider for URL:', url)
+          // Use standard WebSocketProvider for real Ethereum nodes
+          this.provider = new WebSocketProvider(url);
+          // attach listeners
+          this.provider.on('block', (blockNumber: number) => {
+            this.emit('newBlock', blockNumber);
+          });
+
+          this.provider.on('pending', (txHash: string) => {
+            this.emit('pendingTransaction', txHash);
+          });
+
+          // Ethers v6: provider._websocket may not be public; we rely on events for error/close.
+          // We'll attach generic listeners if available (best-effort) for disconnect detection.
+          // @ts-ignore - accessing internal
+          const ws = (this.provider as any)._websocket as WebSocket | undefined;
+          if (ws) {
+            ws.addEventListener('close', (ev: any) => {
+              this.handleDisconnect(ev);
+            });
+            ws.addEventListener('error', (err: any) => {
+              this.emit('error', new Error('WebSocket error')); // propagate generic error
+              this.handleDisconnect(err);
+            });
+            ws.addEventListener('open', () => {
+              this.state.status = 'connected';
+              this.emit('connected');
+            });
+          } else {
+            // If we can't hook into low-level ws, assume immediate success after first call to get block number
+            this.state.status = 'connected';
+            this.emit('connected');
+          }
+
+          // Probe connectivity (optional): fetch current block number; if fails triggers catch
+          this.provider.getBlockNumber().then(() => {
+            if (this.state.status !== 'connected') {
+              this.state.status = 'connected';
+              this.emit('connected');
+            }
+            resolve();
+          }).catch((err) => {
+            this.emit('error', err instanceof Error ? err : new Error(String(err)));
+            this.handleDisconnect(err);
+            reject(err);
+          });
+        }
+      } catch (err: any) {
+        this.emit('error', err instanceof Error ? err : new Error(String(err)));
+        this.handleDisconnect(err);
+        reject(err);
       }
-
-      // Probe connectivity (optional): fetch current block number; if fails triggers catch
-      await this.provider.getBlockNumber();
-      if (this.state.status !== 'connected') {
-        this.state.status = 'connected';
-        this.emit('connected');
-      }
-    } catch (err: any) {
-      this.emit('error', err instanceof Error ? err : new Error(String(err)));
-      this.handleDisconnect(err);
-    }
+    });
   }
 
   /** Gracefully disconnect and stop any reconnection attempts. */
@@ -111,6 +177,7 @@ export class OnChainScanner extends EventEmitter {
     this.state.status = 'disconnected';
     this.emit('disconnected');
   }
+
   /** Lightweight graceful provider close preferring provider.destroy() if present */
   private async closeProvider(timeoutMs = 2000): Promise<void> {
     if (!this.provider) return;

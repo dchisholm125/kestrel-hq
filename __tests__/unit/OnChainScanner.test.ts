@@ -37,8 +37,11 @@ describe('OnChainScanner (unit)', () => {
       const scanner = OnChainScanner.instance;
       // @ts-ignore
       if ((scanner as any).destroy) await (scanner as any).destroy();
-  // brief pause to let sockets/timers close
-  await new Promise((r) => setTimeout(r, 200));
+      // Reset destroyed state for testing (only for unit tests)
+      // @ts-ignore
+      (scanner as any).destroyed = false;
+      // brief pause to let sockets/timers close
+      await new Promise((r) => setTimeout(r, 200));
     } catch (_) {}
   });
 

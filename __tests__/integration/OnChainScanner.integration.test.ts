@@ -4,8 +4,8 @@ import { WebSocketProvider, JsonRpcProvider } from 'ethers';
 // Integration test: auto-detect local Anvil node on 127.0.0.1:8545 and run only if reachable.
 describe('OnChainScanner (integration)', () => {
   console.log('[integration][OnChainScanner] Suite start');
-  const WS_URL = 'ws://127.0.0.1:8545';
-  const HTTP_URL = 'http://127.0.0.1:8545';
+  const WS_URL = 'ws://127.0.0.1:8546'; // Use broadcaster WebSocket
+  const HTTP_URL = 'http://127.0.0.1:8545'; // Use anvil HTTP
   let reachable = false;
 
   // quick connectivity probe before running heavy test steps
