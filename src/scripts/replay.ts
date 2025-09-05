@@ -81,6 +81,15 @@ class ProviderManager {
 const providerManager = new ProviderManager()
 const localProvider = new JsonRpcProvider('http://127.0.0.1:8545')
 
+// Ensure manual mining mode so we can batch all historical txs into a single block
+async function ensureManualMining() {
+  // Try common RPC methods; ignore if unsupported
+  const attempts: Array<Promise<any>> = []
+  attempts.push(localProvider.send('evm_setAutomine', [false]).catch(() => undefined))
+  attempts.push(localProvider.send('anvil_setIntervalMining', [0]).catch(() => undefined))
+  await Promise.all(attempts)
+}
+
 // Replay a single block worth of transactions
 export async function replayBlock(blockNumber: number) {
   console.log(`[replay] Fetching block ${blockNumber} from mainnet...`)
@@ -94,8 +103,50 @@ export async function replayBlock(blockNumber: number) {
     return
   }
   
-  const txs = block.transactions
-  console.log(`[replay] Block ${blockNumber} contains ${txs.length} transactions`)
+  // Build a de-duplicated set of transactions. Some blocks contain replacement
+  // transactions (same from+nonce) where only the highest fee variant actually
+  // landed on mainnet. If we replay *all* variants sequentially we will hit
+  // nonce conflicts after the first succeeds. We therefore pre-select the best
+  // variant per (from, nonce). If provider only returned hashes we fetch each
+  // full transaction first.
+  const rawList = block.transactions
+  console.log(`[replay] Block ${blockNumber} contains ${rawList.length} (raw) transactions`)
+
+  const fullTxs: TransactionResponse[] = []
+  let hashOnly = 0
+  for (let i = 0; i < rawList.length; i++) {
+    const entry: any = rawList[i]
+    if (typeof entry === 'string') {
+      hashOnly++
+      try {
+        const fetched = await providerManager.makeRequest(p => p.getTransaction(entry))
+        if (fetched) fullTxs.push(fetched)
+      } catch (e: any) {
+        console.warn(`[replay] (${i + 1}/${rawList.length}) Failed to fetch tx ${entry}: ${e?.message || e}`)
+      }
+    } else {
+      fullTxs.push(entry as TransactionResponse)
+    }
+  }
+  console.log(`[replay] Expanded to ${fullTxs.length} full transactions (hashOnly fetched: ${hashOnly})`)
+
+  type IndexedTx = { idx: number; tx: TransactionResponse }
+  const bestByKey: Map<string, IndexedTx> = new Map()
+  for (let i = 0; i < fullTxs.length; i++) {
+    const tx = fullTxs[i]
+    const key = `${tx.from?.toLowerCase()}:${tx.nonce}`
+    const effective = (tx.maxFeePerGas ?? tx.gasPrice ?? 0n) as bigint
+    const existing = bestByKey.get(key)
+    if (!existing) {
+      bestByKey.set(key, { idx: i, tx })
+    } else {
+      const existingEff = (existing.tx.maxFeePerGas ?? existing.tx.gasPrice ?? 0n) as bigint
+      if (effective > existingEff) bestByKey.set(key, { idx: i, tx })
+    }
+  }
+  const filtered = Array.from(bestByKey.values()).sort((a, b) => a.idx - b.idx)
+  const txs = filtered.map(f => f.tx)
+  console.log(`[replay] After filtering replacements: ${txs.length} unique (from,nonce) txs (deduped from ${fullTxs.length})`)
   
   if (txs.length === 0) {
     console.log(`[replay] No transactions in block ${blockNumber}, mining empty block`)
@@ -219,6 +270,24 @@ async function main() {
     try {
       console.log(`[replay] ──────────────────────────────────────────────────`)
       console.log(`[replay] 📦 Processing block ${current} (${processedBlocks + 1}/${blockCount})`)
+      
+      // Reset anvil to the PARENT of the target block. If we fork at the block itself
+      // all of its transactions are already included, causing all re-sent txs to have
+      // "nonce too low" errors. Forking at parent lets us faithfully reconstruct it.
+      const parentBlock = current - 1
+      if (parentBlock < 0) {
+        console.error('[replay] Cannot fork at parent of block 0; choose a startBlock > 0')
+        process.exit(1)
+      }
+      console.log(`[replay] 🔄 Resetting anvil fork to parent block ${parentBlock} (target ${current})`)
+  await localProvider.send('anvil_reset', [{
+        forking: {
+          jsonRpcUrl: process.env.MAINNET_RPC_URL || INFURA_URL || ALCHEMY_URL,
+          blockNumber: parentBlock,
+        }
+      }])
+  await ensureManualMining()
+  console.log(`[replay] ✅ Anvil fork reset complete. Beginning replay of target block ${current}`)
       
       await replayBlock(current)
       
