@@ -1,36 +1,41 @@
 import { expect } from 'chai'
-import NodeConnector from '../../src/services/NodeConnector'
-import { ENV } from '../../src/config'
+import NodeConnector, { NodeConnectorConfig } from '../../src/services/NodeConnector'
 
-describe('NodeConnector (unit)', () => {
+describe('NodeConnector (unit) – multi-endpoint failover', () => {
   afterEach(() => {
-    // reset singleton between tests
     NodeConnector.resetForTests()
-    // restore default ctor
-    NodeConnector.WebSocketProviderCtor = (require('ethers') as any).WebSocketProvider
   })
 
-  it('initializes provider with RPC_URL from config', async () => {
-    let capturedUrl: string | null = null
+  it('falls back to second HTTP provider when first fails health check', async () => {
+    const calls: string[] = []
 
-    class FakeWSProvider {
-      constructor(url: string) {
-        capturedUrl = url
+    // Fake HTTP provider ctor sequence
+    class FakeHttpProvider {
+      url: string
+      constructor(url: string) { this.url = url }
+      getBlockNumber(): Promise<number> {
+        calls.push(this.url)
+        if (this.url === 'https://bad.rpc') {
+          return Promise.reject(new Error('unreachable'))
+        }
+        return Promise.resolve(123)
       }
-      // minimal event API used by NodeConnector
-      on(_event: string, _handler: (...args: unknown[]) => void) {}
-      off(_event: string, _handler: (...args: unknown[]) => void) {}
     }
 
-    // inject fake provider ctor
-    NodeConnector.WebSocketProviderCtor = FakeWSProvider
+    // Patch ctor
+    ;(NodeConnector as any).JsonRpcProviderCtor = FakeHttpProvider
 
-    const nc = NodeConnector.getInstance()
+    const cfg: NodeConnectorConfig = {
+      httpUrls: ['https://bad.rpc', 'https://good.rpc'],
+      wsUrls: []
+    }
 
-    // wait until provider was created (connect is async)
+    const nc = NodeConnector.getInstance(cfg)
     const provider = await nc.getProvider()
 
     expect(provider).to.be.ok
-    expect(capturedUrl).to.equal(ENV.RPC_URL)
+    // Expect two attempts: first bad, then good
+    expect(calls).to.deep.equal(['https://bad.rpc', 'https://good.rpc'])
+    expect((provider as any).url).to.equal('https://good.rpc')
   })
 })
