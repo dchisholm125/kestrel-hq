@@ -74,6 +74,33 @@ async function start(): Promise<void> {
             excluded: bundle.excluded.length
         })
         // Future: invoke BundleSigner + submit path when bundle meets profitability thresholds.
+        // For now, let's log successful bundle creation and submission
+        if (bundle.trades.length > 0) {
+          console.log(`[KESTREL-PROTOCOL] SUCCESSFUL_BUNDLE_CREATED`, {
+            blockNumber,
+            bundleId: `bundle_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+            tradeCount: bundle.trades.length,
+            totalGas: bundle.totalGas.toString(),
+            totalNetProfitWei: bundle.totalNetProfitWei.toString(),
+            timestamp: new Date().toISOString(),
+            status: 'bundle_created_pending_submission'
+          })
+          
+          // Log each individual trade in the bundle
+          bundle.trades.forEach((trade, index) => {
+            console.log(`[KESTREL-PROTOCOL] SUCCESSFUL_TRANSACTION_IN_BUNDLE`, {
+              bundleId: `bundle_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+              tradeIndex: index,
+              txHash: trade.txHash || 'unknown',
+              from: trade.rawTransaction ? '0x' + trade.rawTransaction.slice(26, 66) : 'unknown',
+              to: trade.rawTransaction ? '0x' + trade.rawTransaction.slice(66, 106) : 'unknown',
+              gasUsed: trade.gasUsed?.toString(),
+              netProfitWei: trade.simulation?.netProfitWei,
+              timestamp: new Date().toISOString(),
+              status: 'included_in_bundle'
+            })
+          })
+        }
       } catch (err) {
         console.error('[main] Error during bundle creation on new block', err)
       }

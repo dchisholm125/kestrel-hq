@@ -56,6 +56,7 @@ class NodeConnector {
   private static buildConfigFromEnv(): NodeConnectorConfig {
     const env = process.env
     const httpCandidates = [
+  env.MAINNET_RPC_URL, // added to prefer explicit mainnet primary RPC
       env.RPC_URL,
       env.INFURA_RPC_URL,
       env.ALCHEMY_RPC_URL,
@@ -64,6 +65,7 @@ class NodeConnector {
     ].filter(u => typeof u === 'string' && u.startsWith('http')) as string[]
 
     const wsExplicit = [
+  env.BROADCASTER_WS_URL, // added explicit broadcaster ws endpoint
       env.INFURA_WS_URL,
       env.ALCHEMY_WS_URL,
       env.QUICKNODE_WS_URL,

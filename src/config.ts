@@ -23,7 +23,7 @@ if (fs.existsSync(envPath)) {
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT ? Number(process.env.PORT) : 3000,
-  RPC_URL: process.env.RPC_URL || 'http://127.0.0.1:8545',
+  RPC_URL: process.env.RPC_URL || '',
   // Optional multi-endpoint RPC URLs (supporting new NodeConnector + MultiRpc)
   INFURA_RPC_URL: process.env.INFURA_RPC_URL || '',
   ALCHEMY_RPC_URL: process.env.ALCHEMY_RPC_URL || '',

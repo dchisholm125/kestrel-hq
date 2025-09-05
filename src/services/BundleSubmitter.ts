@@ -68,6 +68,15 @@ export class BundleSubmitter {
       const label = tasks[idx].name
       if (res.status === 'fulfilled') {
         console.log(`[BundleSubmitter] ${label}: Success`, { result: res.value })
+        // Log successful transaction execution
+        console.log(`[KESTREL-PROTOCOL] SUCCESSFUL_TRANSACTION_EXECUTED`, {
+          relay: label,
+          signedTransaction: signedTransaction.substring(0, 66) + '...', // First 32 bytes + ...
+          targetBlock: targetBlock,
+          timestamp: new Date().toISOString(),
+          bundleHash: (res.value as any)?.bundleHash || 'unknown',
+          status: 'submitted_to_relay'
+        })
       } else {
         console.warn(`[BundleSubmitter] ${label}: Failed`, { error: res.reason?.message || String(res.reason) })
       }

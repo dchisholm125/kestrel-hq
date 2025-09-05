@@ -3,6 +3,8 @@ import { ENV } from './config.js'
 import { validateSubmitBody } from './validators/submitValidator.js'
 import TransactionSimulator from './services/TransactionSimulator.js'
 import { pendingPool } from './services/PendingPool.js'
+import FileLogger from './utils/fileLogger'
+const fileLogger = FileLogger.getInstance()
 import MetricsTracker from './services/MetricsTracker.js'
 
 const app = express()
@@ -56,10 +58,11 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
       if (simRes.decision === 'ACCEPT') {
         // Add to pending pool
         try {
-          pendingPool.addTrade({
+          const txHash = (simRes as any).txHash || 'unknown'
+          const trade = {
             id,
             rawTransaction: result.raw,
-            txHash: (simRes as any).txHash || 'unknown',
+            txHash,
             receivedAt: Date.now(),
             simulation: {
               grossProfit: (simRes as any).grossProfit,
@@ -67,6 +70,20 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
               gasCostWei: (simRes as any).gasCostWei,
               netProfitWei: (simRes as any).netProfitWei
             }
+          }
+          pendingPool.addTrade(trade)
+
+          // JSONL success log (full simulation accept shape)
+          void fileLogger.logSuccess({
+            event: 'submission_accept',
+            id,
+            txHash,
+            rawPreview: (result.raw || '').slice(0, 20),
+            grossProfitWei: (simRes as any).grossProfitWei,
+            gasCostWei: (simRes as any).gasCostWei,
+            netProfitWei: (simRes as any).netProfitWei,
+            deltas: (simRes as any).deltas,
+            trade
           })
         } catch (e) {
           console.error('[submit-tx] failed adding trade to pool', e)
@@ -151,6 +168,20 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
         gasCostWei: (simRes as any).gasCostWei,
         netProfitWei: (simRes as any).netProfitWei
       }
+      // JSONL rejection log
+      void fileLogger.logRejection({
+        event: 'submission_reject',
+        id,
+        txHash,
+        internalReason,
+        rejectionCode: mapped.rejectionCode,
+        rejectionReason: mapped.rejectionReason,
+        revertMessage: revertMessage || null,
+        requestBody: body,
+        grossProfitWei: (simRes as any).grossProfitWei,
+        gasCostWei: (simRes as any).gasCostWei,
+        netProfitWei: (simRes as any).netProfitWei
+      })
       metrics.incrementRejected()
       metrics.recordProcessingTime(Date.now() - started)
       return res.status(400).json(errorPayload)
@@ -158,6 +189,14 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
       console.error('[submit-tx] simulation failed', e)
       metrics.incrementRejected()
       metrics.recordProcessingTime(Date.now() - started)
+      // JSONL failure log
+      void fileLogger.logFailure({
+        event: 'simulation_failure',
+        id,
+        rawPreview: (result.raw || '').slice(0, 20),
+        error: (e as any)?.message || String(e),
+        stack: (e as any)?.stack
+      })
       return res.status(500).json({ error: 'simulation failed' })
     }
   })()

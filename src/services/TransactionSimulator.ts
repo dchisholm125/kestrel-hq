@@ -66,7 +66,7 @@ class TransactionSimulator {
    * This never mutates chain state.
    */
   public async analyze(raw: string): Promise<SimulationResult> {
-    const debug: Record<string, unknown> = { steps: [] }
+    const debug: Record<string, unknown> = { steps: [], mode: 'trace_first' }
 
     const pushStep = (msg: string, extra?: Record<string, unknown>) => {
       const entry = { t: Date.now(), msg, ...(extra || {}) }
@@ -115,10 +115,8 @@ class TransactionSimulator {
       return { decision: 'REJECT', reason: 'no_provider', revertMessage: errMsg, debug }
     }
 
-    // Build call object
-    // Use hex string forms. Some fields may be undefined (e.g., contract creation)
-    // gasLimit/gasPrice fields optional; provider.call ignores unknown keys
-    let callObj: Record<string, unknown>
+  // Build call object (common to both trace + fallback eth_call)
+  let callObj: Record<string, unknown>
     try {
       const p: any = parsed
       // Derive 'from': ethers parser may have recovered from signature; else left undefined
@@ -151,151 +149,261 @@ class TransactionSimulator {
       return selector + addr
     }
 
+    // ---- TRACE PATH ----
+    const attemptTrace = async (): Promise<SimulationResult | null> => {
+      if (!provider || typeof provider.send !== 'function') return null
+      if (!fromAddress) return null
+      let traceResult: any
+      // Try debug_traceCall first (for paid plans)
+      try {
+        traceResult = await provider.send('debug_traceCall', [callObj, 'latest', { tracer: 'callTracer' }])
+        pushStep('debug_traceCall success')
+      } catch (e1) {
+        pushStep('debug_traceCall failed primary', { error: (e1 as Error).message })
+        // Try debug_traceCall without tracer
+        try {
+          traceResult = await provider.send('debug_traceCall', [callObj, 'latest', {}])
+          pushStep('debug_traceCall success (fallback no tracer)')
+        } catch (e2) {
+          pushStep('debug_traceCall unsupported', { error: (e2 as Error).message })
+          // Try trace_call as alternative (available on more plans)
+          try {
+            const traceCallResult = await provider.send('trace_call', [callObj, ['trace'], 'latest'])
+            traceResult = traceCallResult.trace?.[0] || traceCallResult
+            pushStep('trace_call success')
+          } catch (e3) {
+            pushStep('trace_call failed', { error: (e3 as Error).message })
+            return null
+          }
+        }
+      }
+
+      // If top-level trace indicates error/revert, reject
+      if (traceResult?.error) {
+        const revertMessage = traceResult.error
+        pushStep('trace revert', { revertMessage })
+        return { decision: 'REJECT', reason: 'revert', revertMessage, debug, txHash: txHash || undefined }
+      }
+
+      // Handle different trace formats
+      let traceData = traceResult
+      if (traceResult?.trace && Array.isArray(traceResult.trace)) {
+        // trace_call format
+        traceData = traceResult.trace[0] || traceResult
+      }
+
+      // If trace_call format with error in the trace item
+      if (traceData?.error) {
+        const revertMessage = traceData.error
+        pushStep('trace revert', { revertMessage })
+        return { decision: 'REJECT', reason: 'revert', revertMessage, debug, txHash: txHash || undefined }
+      }
+
+      // Aggregate token deltas from trace frames
+      const tokenDeltas: Record<string, bigint> = {}
+      const tokenSet = new Set<string>(MONITORED_TOKENS)
+      const lowerFrom = fromAddress.toLowerCase()
+      const WETH = MONITORED_TOKENS[0]
+
+      const isAddress = (hex: string) => /^0x[0-9a-fA-F]{40}$/.test(hex)
+      const sliceAddress = (wordHex: string) => '0x' + wordHex.slice(24)
+
+      const recordDelta = (token: string, delta: bigint) => {
+        token = token.toLowerCase()
+        tokenSet.add(token)
+        tokenDeltas[token] = (tokenDeltas[token] || 0n) + delta
+      }
+
+      type CallFrame = { from?: string; to?: string; input?: string; value?: string; calls?: CallFrame[]; action?: { from?: string; to?: string; input?: string; value?: string }; subtraces?: any[] }
+      const traverse = (frame: CallFrame) => {
+        if (!frame) return
+        // Handle both debug_traceCall and trace_call formats
+        const action = frame.action || frame
+        const to = action.to?.toLowerCase()
+        const from = action.from?.toLowerCase()
+        const input: string = action.input || '0x'
+        const value = action.value ? BigInt(action.value) : 0n
+        const selector = input.slice(0, 10)
+        // WETH deposit (value supplied, selector 0xd0e30db0)
+        if (to === WETH && selector === '0xd0e30db0' && value > 0n && from === lowerFrom) {
+          recordDelta(WETH, value)
+        }
+        // WETH withdraw(uint256)
+        if (to === WETH && selector === '0x2e1a7d4d' && input.length >= 10 + 64 && from === lowerFrom) {
+          const amount = BigInt('0x' + input.slice(10, 10 + 64))
+          recordDelta(WETH, -amount)
+        }
+        // transfer(address,uint256)
+        if (selector === '0xa9059cbb' && input.length >= 10 + 64 + 64 && to) {
+          const rawToWord = input.slice(10, 10 + 64)
+            const toAddr = '0x' + rawToWord.slice(24)
+          const amount = BigInt('0x' + input.slice(10 + 64, 10 + 128))
+          if (from === lowerFrom) recordDelta(to, -amount) // sending out tokens
+          if (toAddr.toLowerCase() === lowerFrom) recordDelta(to, amount) // receiving tokens
+        }
+        // transferFrom(address,address,uint256)
+        if (selector === '0x23b872dd' && input.length >= 10 + 64 * 3 && to) {
+          const off = 10
+          const fromWord = input.slice(off, off + 64)
+          const toWord = input.slice(off + 64, off + 128)
+          const amtWord = input.slice(off + 128, off + 192)
+          const srcAddr = sliceAddress(fromWord)
+          const dstAddr = sliceAddress(toWord)
+          const amount = BigInt('0x' + amtWord)
+          if (srcAddr.toLowerCase() === lowerFrom) recordDelta(to, -amount)
+          if (dstAddr.toLowerCase() === lowerFrom) recordDelta(to, amount)
+        }
+        if (frame.calls) frame.calls.forEach(traverse)
+        // Handle trace_call format subtraces
+        if (frame.subtraces && Array.isArray(frame.subtraces)) {
+          // For trace_call, we might need to reconstruct the call hierarchy
+          // This is a simplified approach - in practice, you might need more complex parsing
+        }
+      }
+      traverse(traceData)
+      pushStep('parsed trace', { tokenDeltas: Object.fromEntries(Object.entries(tokenDeltas).map(([k, v]) => [k, v.toString()])) })
+
+      // Fetch pre balances for dynamic token set
+      const balancesBefore: TokenBalanceMap = {}
+      const balancesAfter: TokenBalanceMap = {}
+      for (const token of tokenSet) {
+        try {
+          const data = buildBalanceOf(lowerFrom)
+          let rawBal: string
+          if (provider && typeof provider.call === 'function') rawBal = await provider.call({ to: token, data }, 'latest')
+          else rawBal = await provider.send('eth_call', [{ to: token, data }, 'latest'])
+          const before = BigInt(rawBal)
+          const delta = tokenDeltas[token] || 0n
+          const after = before + delta
+          balancesBefore[token] = before.toString()
+          balancesAfter[token] = after.toString()
+        } catch (e) {
+          pushStep('balance fetch failed', { token, error: (e as Error).message })
+        }
+      }
+      const deltas: TokenDeltaMap = {}
+      const grossProfit: TokenDeltaMap = {}
+      for (const [token, delta] of Object.entries(tokenDeltas)) {
+        deltas[token] = delta.toString()
+        if (delta > 0n) grossProfit[token] = delta.toString()
+      }
+      pushStep('assembled balances + deltas', { tokens: Array.from(tokenSet) })
+
+      // Gas cost estimation (same as legacy)
+      let gasCostWei = 0n
+      try {
+        const pAny: any = parsed
+        const gasLimit = pAny.gasLimit ? BigInt(pAny.gasLimit) : (callObj.gas ? BigInt(callObj.gas as string) : null)
+        const gasPriceLike = pAny.gasPrice || pAny.maxFeePerGas || callObj.gasPrice || callObj.maxFeePerGas
+        const gasPrice = gasPriceLike ? BigInt(gasPriceLike) : null
+        if (gasLimit !== null && gasPrice !== null) gasCostWei = gasLimit * gasPrice
+        pushStep('computed gas cost', { gasCostWei: gasCostWei.toString() })
+      } catch (e) {
+        pushStep('gas cost computation failed', { error: (e as Error).message })
+      }
+
+      const grossProfitWei = (() => { try { return (tokenDeltas[WETH] || 0n) > 0n ? (tokenDeltas[WETH] || 0n) : 0n } catch { return 0n } })()
+      let netProfitWei = 0n
+      if (grossProfitWei > 0n) {
+        netProfitWei = computeNetProfit(grossProfitWei, gasCostWei)
+        pushStep('profit computed', { grossProfitWei: grossProfitWei.toString(), netProfitWei: netProfitWei.toString(), gasCostWei: gasCostWei.toString() })
+        if (netProfitWei <= 0n) {
+          return { decision: 'REJECT', reason: 'unprofitable', revertMessage: 'Net profit <= 0 after gas', debug, balancesBefore, balancesAfter, deltas, grossProfit, grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString(), txHash: txHash || undefined }
+        }
+      } else {
+        pushStep('no gross profit detected (trace)')
+      }
+      return { decision: 'ACCEPT', debug, balancesBefore, balancesAfter, deltas, grossProfit, grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString(), txHash: txHash || 'unknown' }
+    }
+
+    const traceOutcome = await attemptTrace()
+    if (traceOutcome) return traceOutcome
+    // ---- FALLBACK LEGACY eth_call PATH ----
+    debug.mode = 'legacy_eth_call'
     const balancesBefore: TokenBalanceMap = {}
     if (fromAddress) {
       for (const token of MONITORED_TOKENS) {
         try {
           const data = buildBalanceOf(fromAddress)
           let rawBal: string
-            // prefer call; fallback to send
-          if (provider && typeof provider.call === 'function') {
-            rawBal = await provider.call({ to: token, data }, 'latest')
-          } else {
-            rawBal = await provider.send('eth_call', [{ to: token, data }, 'latest'])
-          }
-          const bal = BigInt(rawBal)
-          balancesBefore[token] = bal.toString()
+          if (provider && typeof provider.call === 'function') rawBal = await provider.call({ to: token, data }, 'latest')
+          else rawBal = await provider.send('eth_call', [{ to: token, data }, 'latest'])
+          balancesBefore[token] = BigInt(rawBal).toString()
         } catch (e) {
           pushStep('balanceOf before failed', { token, error: (e as Error).message })
         }
       }
-      pushStep('collected pre balances', { balancesBefore })
+      pushStep('collected pre balances (legacy)', { balancesBefore })
     }
-
-    // Perform eth_call using provider.call or provider.send fallback
-    let callSucceeded = false
+    let legacySucceeded = false
     try {
-      let result: unknown
-      if (provider && typeof provider.call === 'function') {
-        result = await provider.call(callObj, 'latest')
-      } else if (provider && typeof provider.send === 'function') {
-        result = await provider.send('eth_call', [callObj, 'latest'])
-      } else {
-        pushStep('provider lacks call/send')
-    return { decision: 'REJECT', reason: 'unsupported_provider', revertMessage: 'Provider lacks call/send interface', debug, txHash: txHash || undefined }
+      if (provider && typeof provider.call === 'function') await provider.call(callObj, 'latest')
+      else if (provider && typeof provider.send === 'function') await provider.send('eth_call', [callObj, 'latest'])
+      else {
+        pushStep('provider lacks call/send (legacy)')
+        return { decision: 'REJECT', reason: 'unsupported_provider', revertMessage: 'Provider lacks call/send interface', debug, txHash: txHash || undefined }
       }
-      callSucceeded = true
-      pushStep('eth_call success', { returnDataPreview: String(result).slice(0, 20) })
+      legacySucceeded = true
+      pushStep('eth_call success (legacy)')
     } catch (e) {
-      // Ethers errors may embed a revert reason in different shapes; capture generously
-      const errObj: Record<string, unknown> = {
-        message: (e as Error).message
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const anyE = e as any
-      if (anyE?.code) errObj.code = anyE.code
-      if (anyE?.reason) errObj.reason = anyE.reason
-      if (anyE?.error?.message) errObj.innerMessage = anyE.error.message
-      if (anyE?.data) errObj.data = anyE.data
+      const anyE: any = e
       const revertMessage = (anyE?.reason || anyE?.error?.message || (e as Error).message) as string
-      pushStep('eth_call revert/failure', { ...errObj, revertMessage })
+      pushStep('eth_call revert/failure (legacy)', { revertMessage })
       return { decision: 'REJECT', reason: 'revert', revertMessage, debug, txHash: txHash || undefined }
     }
-
-  // Heuristic post-state diff (since chain not mutated by eth_call). We attempt to infer token balance deltas.
-    // Currently implemented heuristics:
-    //  - WETH deposit: tx.to == WETH and data starts with 0xd0e30db0 => token increase by tx.value
-    //  - WETH withdraw: tx.to == WETH and data starts with 0x2e1a7d4d => token decrease by encoded param (amount)
-    // Future: integrate traces for generalized ERC20 transfer extraction.
-
-    // Fetch post balances (real chain state unchanged by eth_call, but we support heuristic adjustments)
-    const balancesAfter: TokenBalanceMap = {}
-    if (fromAddress) {
-      for (const token of MONITORED_TOKENS) {
-        try {
-          const data = buildBalanceOf(fromAddress)
-          let rawBal: string
-          if (provider && typeof provider.call === 'function') {
-            rawBal = await provider.call({ to: token, data }, 'latest')
-          } else {
-            rawBal = await provider.send('eth_call', [{ to: token, data }, 'latest'])
-          }
-          balancesAfter[token] = BigInt(rawBal).toString()
-        } catch (e) {
-          pushStep('balanceOf after failed', { token, error: (e as Error).message })
-        }
-      }
-      pushStep('collected post balances', { balancesAfter })
+    if (!legacySucceeded) {
+      return { decision: 'REJECT', reason: 'unknown_failure', revertMessage: 'Unknown failure during legacy path', debug, txHash: txHash || undefined }
     }
-
-    // Clone for possible heuristic mutation
-    const adjustedAfter: Record<string, bigint> = {}
-    for (const t of MONITORED_TOKENS) {
-      const before = BigInt(balancesBefore[t] || '0')
-      const after = BigInt(balancesAfter[t] || '0')
-      adjustedAfter[t] = after
-      // Heuristic adjustments
-      try {
-        const toAddr = (callObj.to as string | undefined)?.toLowerCase()
-        const data: string = (callObj.data as string) || '0x'
-        const valueHex = callObj.value as string | undefined
-        const value = valueHex ? BigInt(valueHex) : 0n
-        const WETH = MONITORED_TOKENS[0]
-        if (t === WETH && toAddr === WETH && data.startsWith('0xd0e30db0') && value > 0n) {
-          adjustedAfter[t] = before + value // simulate deposit
-        }
-        if (t === WETH && toAddr === WETH && data.startsWith('0x2e1a7d4d') && data.length === 10 + 64) {
-          const amount = BigInt('0x' + data.slice(10))
-            adjustedAfter[t] = before - amount
-        }
-      } catch (e) {
-        pushStep('heuristic adjust failed', { token: t, error: (e as Error).message })
+    // Reuse original heuristics for WETH deposit/withdraw
+    const balancesAfter: TokenBalanceMap = { ...balancesBefore }
+    try {
+      const toAddr = (callObj.to as string | undefined)?.toLowerCase()
+      const data: string = (callObj.data as string) || '0x'
+      const valueHex = callObj.value as string | undefined
+      const value = valueHex ? BigInt(valueHex) : 0n
+      const WETH = MONITORED_TOKENS[0]
+      if (toAddr === WETH && data.startsWith('0xd0e30db0') && value > 0n) {
+        const before = BigInt(balancesAfter[WETH] || '0')
+        balancesAfter[WETH] = (before + value).toString()
       }
+      if (toAddr === WETH && data.startsWith('0x2e1a7d4d') && data.length === 10 + 64) {
+        const amount = BigInt('0x' + data.slice(10))
+        const before = BigInt(balancesAfter[WETH] || '0')
+        balancesAfter[WETH] = (before - amount).toString()
+      }
+    } catch (e) {
+      pushStep('legacy heuristic adjust failed', { error: (e as Error).message })
     }
-
     const deltas: TokenDeltaMap = {}
     const grossProfit: TokenDeltaMap = {}
     for (const t of MONITORED_TOKENS) {
       const before = BigInt(balancesBefore[t] || '0')
-      const aft = adjustedAfter[t]
-      const delta = aft - before
+      const after = BigInt(balancesAfter[t] || '0')
+      const delta = after - before
       deltas[t] = delta.toString()
       if (delta > 0n) grossProfit[t] = delta.toString()
     }
-    pushStep('computed deltas', { deltas, grossProfit })
-
-    // Gas cost estimation (only if both limit and price-style fields present)
     let gasCostWei = 0n
     try {
       const pAny: any = parsed
       const gasLimit = pAny.gasLimit ? BigInt(pAny.gasLimit) : (callObj.gas ? BigInt(callObj.gas as string) : null)
       const gasPriceLike = pAny.gasPrice || pAny.maxFeePerGas || callObj.gasPrice || callObj.maxFeePerGas
       const gasPrice = gasPriceLike ? BigInt(gasPriceLike) : null
-      if (gasLimit !== null && gasPrice !== null) {
-        gasCostWei = gasLimit * gasPrice
-      }
-      pushStep('computed gas cost', { gasLimit: gasLimit?.toString(), gasPrice: gasPrice?.toString(), gasCostWei: gasCostWei.toString() })
+      if (gasLimit !== null && gasPrice !== null) gasCostWei = gasLimit * gasPrice
+      pushStep('computed gas cost (legacy)', { gasCostWei: gasCostWei.toString() })
     } catch (e) {
-      pushStep('gas cost computation failed', { error: (e as Error).message })
+      pushStep('gas cost computation failed (legacy)', { error: (e as Error).message })
     }
-
-    // Gross profit assumption: only WETH positive delta counts for MVP
     const WETH = MONITORED_TOKENS[0]
-    const grossProfitWei = (() => {
-      try { return BigInt(deltas[WETH] || '0') > 0n ? BigInt(deltas[WETH]) : 0n } catch { return 0n }
-    })()
+    const grossProfitWei = (() => { try { return BigInt(deltas[WETH] || '0') > 0n ? BigInt(deltas[WETH]) : 0n } catch { return 0n } })()
     let netProfitWei = 0n
     if (grossProfitWei > 0n) {
       netProfitWei = computeNetProfit(grossProfitWei, gasCostWei)
-      pushStep('profit computed', { grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString() })
       if (netProfitWei <= 0n) {
-  return { decision: 'REJECT', reason: 'unprofitable', revertMessage: 'Net profit less than or equal to zero after gas', debug, balancesBefore, balancesAfter, deltas, grossProfit, grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString(), txHash: txHash || undefined }
+        return { decision: 'REJECT', reason: 'unprofitable', revertMessage: 'Net profit <= 0 after gas (legacy)', debug, balancesBefore, balancesAfter, deltas, grossProfit, grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString(), txHash: txHash || undefined }
       }
-    } else {
-      pushStep('no gross profit detected')
     }
-
-      return { decision: 'ACCEPT', debug, balancesBefore, balancesAfter, deltas, grossProfit, grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString(), txHash: txHash || 'unknown' }
+    return { decision: 'ACCEPT', debug, balancesBefore, balancesAfter, deltas, grossProfit, grossProfitWei: grossProfitWei.toString(), gasCostWei: gasCostWei.toString(), netProfitWei: netProfitWei.toString(), txHash: txHash || 'unknown' }
   }
 }
 
