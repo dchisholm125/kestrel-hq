@@ -7,7 +7,8 @@
   "type": "commonjs",
   "main": "dist/src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+  "test": "npm run build && mocha dist/test/**/*.spec.js --exit",
+  "test:grep": "npm run build && mocha dist/test/**/*.spec.js --exit -g",
     "test:unit": "npm run build && mocha dist/test/unit/**/*.spec.js --exit",
     "test:integration": "npm run build && mocha dist/test/integration/**/*.spec.js --exit",
     "compile:contracts": "ts-node scripts/compile-contracts.ts",
@@ -30,8 +31,10 @@
   "devDependencies": {
     "@types/chai": "^4.3.4",
     "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
     "@types/mocha": "^10.0.1",
     "@types/sinon": "^10.0.20",
+    "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.42.0",
     "@typescript-eslint/parser": "^8.42.0",
     "arg": "^5.0.2",
@@ -42,6 +45,7 @@
     "prettier": "^3.6.2",
     "sinon": "^17.0.1",
     "solc": "^0.8.25",
+    "supertest": "^7.1.4",
     "ts-node": "^10.9.1",
     "tsx": "^4.20.5",
     "typescript": "^5.5.0"

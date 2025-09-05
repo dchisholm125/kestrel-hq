@@ -3,6 +3,7 @@ import { ENV } from './config.js'
 import { validateSubmitBody } from './validators/submitValidator.js'
 import TransactionSimulator from './services/TransactionSimulator.js'
 import { pendingPool } from './services/PendingPool.js'
+import MetricsTracker from './services/MetricsTracker.js'
 
 const app = express()
 const port = ENV.API_SERVER_PORT || ENV.PORT || 3000
@@ -32,12 +33,18 @@ type SubmitTxBody = {
 }
 
 app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unknown>, SubmitTxBody>, res: Response) => {
+  const metrics = MetricsTracker.getInstance()
+  const started = Date.now()
   const body = req.body
 
   const result = validateSubmitBody(body)
   if (!result.valid) {
+    metrics.incrementRejected()
+    metrics.incrementReceived() // counted as received even if invalid
+    metrics.recordProcessingTime(Date.now() - started)
     return res.status(400).json({ error: result.error })
   }
+  metrics.incrementReceived()
 
   const id = `sub_${Date.now()}_${Math.floor(Math.random() * 100000)}`
   console.info('[submit-tx] received submission', { id, rawPreview: (result.raw || '').slice(0, 20) })
@@ -64,6 +71,8 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
         } catch (e) {
           console.error('[submit-tx] failed adding trade to pool', e)
         }
+        metrics.incrementAccepted()
+        metrics.recordProcessingTime(Date.now() - started)
         return res.status(200).json({ id, status: 'accepted', simulation: 'ACCEPT', grossProfit: (simRes as any).grossProfit, grossProfitWei: (simRes as any).grossProfitWei, gasCostWei: (simRes as any).gasCostWei, netProfitWei: (simRes as any).netProfitWei, deltas: (simRes as any).deltas, txHash: (simRes as any).txHash })
       }
       // Map internal reason to external code + human message + suggestion
@@ -142,12 +151,22 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
         gasCostWei: (simRes as any).gasCostWei,
         netProfitWei: (simRes as any).netProfitWei
       }
+      metrics.incrementRejected()
+      metrics.recordProcessingTime(Date.now() - started)
       return res.status(400).json(errorPayload)
     } catch (e) {
       console.error('[submit-tx] simulation failed', e)
+      metrics.incrementRejected()
+      metrics.recordProcessingTime(Date.now() - started)
       return res.status(500).json({ error: 'simulation failed' })
     }
   })()
+})
+
+// GET /stats - expose metrics
+app.get('/stats', (_req: Request, res: Response) => {
+  const metrics = MetricsTracker.getInstance()
+  res.status(200).json(metrics.getStats())
 })
 
 // Only start server when this file is executed directly. Export app for tests.
