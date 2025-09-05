@@ -1,6 +1,6 @@
 {
-  "name": "kestrel-aerie",
-  "version": "0.1.0",
+  "name": "@dchisholm125/kestrel-aerie",
+  "version": "0.1.1",
   "description": "Kestrel Aerie SDK - OnChainScanner module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
