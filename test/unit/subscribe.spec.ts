@@ -11,6 +11,9 @@ describe('NodeConnector subscribe (unit)', () => {
     let registeredHandler: ((n: number) => void) | null = null
 
     class FakeWSProvider {
+      async getBlockNumber() {
+        return 12345
+      }
       on(event: string, handler: (...args: unknown[]) => void) {
         if (event === 'block') {
           // store the handler so test can inspect
@@ -22,8 +25,12 @@ describe('NodeConnector subscribe (unit)', () => {
 
     NodeConnector.WebSocketProviderCtor = FakeWSProvider
 
-    const nc = NodeConnector.getInstance()
-    const provider = await nc.getProvider()
+    const nc = NodeConnector.getInstance({
+      httpUrls: ['https://test.rpc'],
+      wsUrls: ['wss://test.ws']
+    })
+    // Initialize the streaming provider first
+    const provider = await nc.getStreamingProvider()
     expect(provider).to.be.ok
 
     const cb = (num: number) => {

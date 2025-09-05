@@ -5,6 +5,9 @@ import * as ethers from 'ethers'
 import { ENV } from '../../src/config'
 import { pendingPool } from '../../src/services/PendingPool'
 import { batchingEngine } from '../../src/services/BatchingEngine'
+import NodeConnector from '../../src/services/NodeConnector'
+import fs from 'fs'
+import path from 'path'
 
 function postJson(port: number, path: string, payload: any): Promise<{ status: number | null; body: string }> {
   const data = JSON.stringify(payload)
@@ -34,6 +37,11 @@ describe('BatchingEngine greedy bundle (integration)', function () {
   const DEPOSIT_SELECTOR = '0xd0e30db0'
 
   before(async () => {
+    // Initialize NodeConnector for the test
+    NodeConnector.resetForTests()
+    const nc = NodeConnector.getInstance()
+    await nc.getProvider()
+
     server = app.listen(0)
     port = (server.address() as any).port
     provider = new (ethers as any).JsonRpcProvider(ENV.RPC_URL)

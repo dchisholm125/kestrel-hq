@@ -3,6 +3,9 @@ import { expect } from 'chai'
 import http from 'http'
 import * as ethers from 'ethers'
 import { ENV } from '../../src/config'
+import NodeConnector from '../../src/services/NodeConnector'
+import fs from 'fs'
+import path from 'path'
 
 // Helper to POST JSON
 function postJson(port: number, path: string, payload: any): Promise<{ status: number | null; body: string }> {
@@ -28,6 +31,17 @@ describe('TransactionSimulator /submit-tx (integration)', function () {
   let server: any
   let port: number
   let provider: any
+
+  before(async () => {
+    // Initialize NodeConnector for the test
+    NodeConnector.resetForTests()
+    const nc = NodeConnector.getInstance()
+    await nc.getProvider()
+
+    server = app.listen(0)
+    port = (server.address() as any).port
+    provider = new (ethers as any).JsonRpcProvider(ENV.RPC_URL)
+  })
   let fundedWallet: ethers.Wallet
 
   before(async () => {

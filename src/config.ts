@@ -4,6 +4,22 @@
  * Centralized configuration module for environment variables and constants.
  */
 
+// Load environment variables from .env file if it exists
+import fs from 'fs'
+import path from 'path'
+
+const envPath = path.join(process.cwd(), 'src', '.env')
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8')
+  const envVars = envContent.split('\n').filter(line => line.includes('='))
+  envVars.forEach(line => {
+    const [key, value] = line.split('=')
+    if (key && value) {
+      process.env[key] = value
+    }
+  })
+}
+
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT ? Number(process.env.PORT) : 3000,

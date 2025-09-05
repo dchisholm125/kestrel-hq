@@ -4,6 +4,9 @@ import http from 'http'
 import * as ethers from 'ethers'
 import { ENV } from '../../src/config'
 import { pendingPool } from '../../src/services/PendingPool'
+import NodeConnector from '../../src/services/NodeConnector'
+import fs from 'fs'
+import path from 'path'
 
 function postJson(port: number, path: string, payload: any): Promise<{ status: number | null; body: string }> {
   const data = JSON.stringify(payload)
@@ -28,6 +31,19 @@ describe('PendingPool pipeline integration', function () {
   let port: number
   let wallet: ethers.Wallet
   let provider: any
+
+  before(async () => {
+    // Initialize NodeConnector for the test
+    NodeConnector.resetForTests()
+    const nc = NodeConnector.getInstance()
+    await nc.getProvider()
+
+    server = app.listen(0)
+    port = (server.address() as any).port
+    provider = new (ethers as any).JsonRpcProvider(ENV.RPC_URL)
+    const defaultPk = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
+    wallet = new (ethers as any).Wallet(defaultPk, provider)
+  })
 
   const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
   const DEPOSIT_SELECTOR = '0xd0e30db0'

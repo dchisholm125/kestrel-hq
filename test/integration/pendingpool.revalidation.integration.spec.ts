@@ -5,6 +5,9 @@ import * as ethers from 'ethers'
 import { pendingPool } from '../../src/services/PendingPool'
 import TransactionSimulator from '../../src/services/TransactionSimulator'
 import { ENV } from '../../src/config'
+import NodeConnector from '../../src/services/NodeConnector'
+import fs from 'fs'
+import path from 'path'
 
 // Helper to POST JSON
 function postJson(port: number, path: string, payload: any): Promise<{ status: number | null; body: string }> {
@@ -43,6 +46,24 @@ describe('PendingPool revalidation (integration) - stale trade removal', functio
   const DEPOSIT_SELECTOR = '0xd0e30db0'
 
   before(async () => {
+    // Load .env file manually for integration tests
+    const envPath = path.join(__dirname, '../../src/.env')
+    if (fs.existsSync(envPath)) {
+      const envContent = fs.readFileSync(envPath, 'utf8')
+      const envVars = envContent.split('\n').filter(line => line.includes('='))
+      envVars.forEach(line => {
+        const [key, value] = line.split('=')
+        if (key && value) {
+          process.env[key] = value
+        }
+      })
+    }
+
+    // Initialize NodeConnector for the test
+    NodeConnector.resetForTests()
+    const nc = NodeConnector.getInstance()
+    await nc.getProvider()
+
     server = app.listen(0)
     port = (server.address() as any).port
     provider = new (ethers as any).JsonRpcProvider(ENV.RPC_URL)

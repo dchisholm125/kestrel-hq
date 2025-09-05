@@ -17,18 +17,19 @@ wss.on('connection', (ws, req) => {
 
 const pollAnvil = async () => {
   try {
-    const response = await axios.post('http://127.0.0.1:8545', {
+    // Check for new blocks
+    const blockResponse = await axios.post('http://127.0.0.1:8545', {
       jsonrpc: '2.0',
       method: 'eth_blockNumber',
       params: [],
       id: 1
     }, { headers: { 'Content-Type': 'application/json' }, timeout: 3000 })
 
-    if (!response || !response.data || typeof response.data.result === 'undefined') {
+    if (!blockResponse || !blockResponse.data || typeof blockResponse.data.result === 'undefined') {
       throw new Error('invalid response from anvil')
     }
 
-    const blockNumber = parseInt(response.data.result, 16)
+    const blockNumber = parseInt(blockResponse.data.result, 16)
     if (Number.isNaN(blockNumber)) throw new Error('invalid block number')
 
     if (blockNumber !== lastBlock) {
@@ -39,8 +40,32 @@ const pollAnvil = async () => {
       })
       console.log('[broadcaster] new block:', blockNumber)
     }
+
+    // Check for pending transactions
+    const pendingResponse = await axios.post('http://127.0.0.1:8545', {
+      jsonrpc: '2.0',
+      method: 'eth_getBlockByNumber',
+      params: ['pending', true],
+      id: 2
+    }, { headers: { 'Content-Type': 'application/json' }, timeout: 3000 })
+
+    if (pendingResponse && pendingResponse.data && pendingResponse.data.result) {
+      const pendingBlock = pendingResponse.data.result
+      if (pendingBlock && pendingBlock.transactions && pendingBlock.transactions.length > 0) {
+        for (const tx of pendingBlock.transactions) {
+          const txHash = typeof tx === 'string' ? tx : tx.hash
+          if (txHash) {
+            const payload = JSON.stringify({ type: 'pending', txHash })
+            wss.clients.forEach(client => {
+              if (client.readyState === WebSocket.OPEN) client.send(payload)
+            })
+            console.log('[broadcaster] pending tx:', txHash)
+          }
+        }
+      }
+    }
   } catch (error) {
-    console.error('[broadcaster] Error polling block number:', error && error.message ? error.message : error)
+    console.error('[broadcaster] Error polling anvil:', error && error.message ? error.message : error)
   }
 }
 
