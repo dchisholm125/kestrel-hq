@@ -29,6 +29,10 @@ describe('TradeCrafter (integration)', () => {
       http = new JsonRpcProvider(HTTP_URL);
       ws = new WebSocketProvider(WS_URL);
       await http.getBlockNumber();
+      
+      // Reset Anvil state to ensure clean nonce
+      await http.send('anvil_reset', []);
+      
       scanner = OnChainScanner.instance;
       identifier = new OpportunityIdentifier(ws);
       crafter = new TradeCrafter(http);

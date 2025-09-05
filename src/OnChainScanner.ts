@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { WebSocketProvider } from 'ethers';
+import { Logger } from './utils/logger';
 
 export type OnChainScannerEvents =
   | { type: 'newBlock'; blockNumber: number }
@@ -31,7 +32,10 @@ export class OnChainScanner extends EventEmitter {
 
   private constructor() {
     super();
+    this.logger = new Logger('OnChainScanner');
   }
+
+  private logger: Logger;
 
   public static get instance(): OnChainScanner {
     if (!this._instance) {
@@ -44,38 +48,38 @@ export class OnChainScanner extends EventEmitter {
    * Connect to a websocket endpoint. If already connected to same URL, no-op.
    */
   public async connect(url: string): Promise<void> {
-    console.log('[OnChainScanner] connect called with URL:', url)
+  this.logger.info('connect called', { url })
     if (this.destroyed) {
-      console.log('[OnChainScanner] destroyed, throwing error')
+  this.logger.warn('destroyed, throwing error')
       throw new Error('OnChainScanner has been destroyed');
     }
     if (this.provider && this.state.status === 'connected' && this.state.url === url) {
-      console.log('[OnChainScanner] already connected to same URL, returning early')
+  this.logger.info('already connected to same URL, returning early', { url })
       return; // already connected
     }
 
-    console.log('[OnChainScanner] calling establishConnection')
+  this.logger.info('calling establishConnection', { url })
     await this.establishConnection(url);
   }
 
   private async establishConnection(url: string) {
-    console.log('[OnChainScanner] establishConnection called with URL:', url)
+  this.logger.info('establishConnection called', { url })
     this.cleanupProvider();
     this.state = { status: 'connecting', attempts: 0, url };
 
     return new Promise<void>((resolve, reject) => {
       try {
         // Check if this is our custom broadcaster URL
-        console.log('[OnChainScanner] Checking URL:', url)
+  this.logger.debug('Checking URL', { url })
         if (url.includes('127.0.0.1:8546') || url.includes('localhost:8546')) {
-          console.log('[OnChainScanner] Using custom broadcaster WebSocket connection')
+          this.logger.info('Using custom broadcaster WebSocket connection')
           // Use WebSocket directly for our custom broadcaster
           try {
             const WebSocket = require('ws');
             const ws = new WebSocket(url);
 
             ws.on('open', () => {
-              console.log('[OnChainScanner] WebSocket connected to broadcaster');
+              this.logger.info('WebSocket connected to broadcaster');
               this.state.status = 'connected';
               this.emit('connected');
               resolve();
@@ -84,26 +88,26 @@ export class OnChainScanner extends EventEmitter {
             ws.on('message', (data: Buffer) => {
               try {
                 const message = JSON.parse(data.toString());
-                console.log('[OnChainScanner] received message:', message.type)
+                this.logger.debug('received message', message)
                 if (message.type === 'block') {
-                  console.log('[OnChainScanner] emitting newBlock:', message.blockNumber)
+                  this.logger.info('emitting newBlock', { blockNumber: message.blockNumber })
                   this.emit('newBlock', message.blockNumber);
                 } else if (message.type === 'pending') {
-                  console.log('[OnChainScanner] emitting pendingTransaction:', message.txHash)
+                  this.logger.info('emitting pendingTransaction', { txHash: message.txHash })
                   this.emit('pendingTransaction', message.txHash);
                 }
               } catch (err) {
-                console.error('[OnChainScanner] error parsing message:', err)
+                this.logger.error('error parsing message', { err: err instanceof Error ? err.message : err })
               }
             });
 
             ws.on('close', () => {
-              console.log('[OnChainScanner] WebSocket closed')
+              this.logger.warn('WebSocket closed')
               this.handleDisconnect();
             });
 
             ws.on('error', (err: any) => {
-              console.error('[OnChainScanner] WebSocket error:', err.message);
+              this.logger.error('WebSocket error', { message: err?.message })
               this.emit('error', new Error('WebSocket error'));
               this.handleDisconnect(err);
               reject(err);
@@ -114,11 +118,11 @@ export class OnChainScanner extends EventEmitter {
             reject(new Error('ws package not available'));
           }
         } else {
-          console.log('[OnChainScanner] Using standard WebSocketProvider for URL:', url)
+          this.logger.info('Using standard WebSocketProvider', { url })
           // Use standard WebSocketProvider for real Ethereum nodes
           this.provider = new WebSocketProvider(url);
           // attach listeners
-          this.provider.on('block', (blockNumber: number) => {
+            this.provider.on('block', (blockNumber: number) => {
             this.emit('newBlock', blockNumber);
           });
 
@@ -130,11 +134,13 @@ export class OnChainScanner extends EventEmitter {
           // We'll attach generic listeners if available (best-effort) for disconnect detection.
           // @ts-ignore - accessing internal
           const ws = (this.provider as any)._websocket as WebSocket | undefined;
-          if (ws) {
+            if (ws) {
             ws.addEventListener('close', (ev: any) => {
+              this.logger.warn('provider websocket close', ev)
               this.handleDisconnect(ev);
             });
             ws.addEventListener('error', (err: any) => {
+              this.logger.error('provider websocket error', { message: err?.message })
               this.emit('error', new Error('WebSocket error')); // propagate generic error
               this.handleDisconnect(err);
             });
@@ -156,12 +162,14 @@ export class OnChainScanner extends EventEmitter {
             }
             resolve();
           }).catch((err) => {
+            this.logger.error('provider getBlockNumber failed', { err: err instanceof Error ? err.message : err })
             this.emit('error', err instanceof Error ? err : new Error(String(err)));
             this.handleDisconnect(err);
             reject(err);
           });
         }
       } catch (err: any) {
+        this.logger.error('establishConnection error', { err: err instanceof Error ? err.message : err })
         this.emit('error', err instanceof Error ? err : new Error(String(err)));
         this.handleDisconnect(err);
         reject(err);

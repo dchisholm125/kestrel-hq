@@ -46,6 +46,10 @@ describe('OpportunityIdentifier deterministic Uniswap V2 swap (integration)', ()
         httpProvider.getBlockNumber(),
         new Promise((_, rej) => setTimeout(() => rej(new Error('timeout probing node')), 2000))
       ]);
+      
+      // Reset Anvil state to ensure clean nonce
+      await httpProvider.send('anvil_reset', []);
+      
       signer = await httpProvider.getSigner(0);
       scanner = OnChainScanner.instance;
       identifier = new OpportunityIdentifier(wsProvider); // use ws provider for mempool visibility
