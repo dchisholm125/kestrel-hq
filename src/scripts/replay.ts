@@ -1,4 +1,4 @@
-import { JsonRpcProvider, TransactionResponse } from 'ethers'
+import { JsonRpcProvider, TransactionResponse, Transaction } from 'ethers'
 
 // Environment: MAINNET_RPC_URL must be set
 const INFURA_URL = process.env.INFURA_RPC_URL
@@ -116,7 +116,26 @@ export async function replayBlock(blockNumber: number) {
       // Some providers may not expose raw on already-mined tx; reconstruct raw if needed.
       // For simplicity we leverage the built-in .serialize() if present via `fullTx.serialized` or `fullTx.raw`.
       // Fallback: attempt to populate fields and send as raw hex if raw not available.
-      const raw = (fullTx as any).serialized || (fullTx as any).raw
+      let raw: string | null = null
+
+      // Try to get raw from existing properties first
+      if ((fullTx as any).serialized) {
+        raw = (fullTx as any).serialized
+      } else if ((fullTx as any).raw) {
+        raw = (fullTx as any).raw
+      }
+
+      // If no raw available, try to reconstruct from transaction object (handles Type 3 blob transactions)
+      if (!raw) {
+        try {
+          const reconstructedTx = Transaction.from(fullTx)
+          raw = reconstructedTx.serialized
+          console.log(`[replay] (${index}/${txs.length}) reconstructed raw for ${fullTx.hash} (Type ${reconstructedTx.type})`)
+        } catch (reconstructError: any) {
+          console.warn(`[replay] (${index}/${txs.length}) failed to reconstruct raw for ${fullTx.hash}: ${reconstructError.message}`)
+        }
+      }
+
       if (!raw) {
         console.warn(`[replay] tx ${fullTx.hash} missing raw serialization; skipping`)
         continue
