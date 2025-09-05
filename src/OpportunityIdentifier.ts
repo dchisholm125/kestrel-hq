@@ -7,19 +7,26 @@ export interface Opportunity {
   path: string[];
   amountInWei: bigint; // amount of ETH sent (for swapExactETHForTokens)
   functionSelector: string;
+  dex: string; // Added to identify the DEX
 }
 
-// Uniswap V2 Router02 mainnet address
-export const UNISWAP_V2_ROUTER_ADDRESS = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'.toLowerCase();
+// DEX Router Addresses (Mainnet)
+export const DEX_ROUTERS = {
+  UNISWAP_V2: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'.toLowerCase(),
+  SUSHISWAP: '0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F'.toLowerCase(),
+  CURVE_V2: '0x5a6A4D54456819380173272A5E8E9B9904BdF41B'.toLowerCase(), // Curve Zap for V2
+} as const;
+
 export const WETH_ADDRESS = '0xC02aaA39b223FE8D0A0E5C4F27eAD9083C756Cc2'.toLowerCase();
 
-// We only care (MVP) about swapExactETHForTokens
+// Function signatures and selectors
 const SWAP_EXACT_ETH_FOR_TOKENS_SIGNATURE = 'swapExactETHForTokens(uint256,address[],address,uint256)';
-const SWAP_EXACT_ETH_FOR_TOKENS_SELECTOR = '0x7ff36ab5'; // first 4 bytes keccak of signature
+const SWAP_EXACT_ETH_FOR_TOKENS_SELECTOR = '0x7ff36ab5'; // Uniswap V2 / Sushiswap
 
-const iface = new Interface([
-  `function ${SWAP_EXACT_ETH_FOR_TOKENS_SIGNATURE} payable`
-]);
+// Interfaces for each DEX (Uniswap and Sushiswap use the same interface)
+const uniswapIface = new Interface([`function ${SWAP_EXACT_ETH_FOR_TOKENS_SIGNATURE} payable`]);
+const sushiswapIface = new Interface([`function ${SWAP_EXACT_ETH_FOR_TOKENS_SIGNATURE} payable`]);
+const curveIface = new Interface([`function ${SWAP_EXACT_ETH_FOR_TOKENS_SIGNATURE} payable`]); // Placeholder for Curve
 
 export class OpportunityIdentifier {
   private provider: Provider;
@@ -29,7 +36,8 @@ export class OpportunityIdentifier {
   }
 
   /**
-   * Analyze a pending transaction hash for a simple Uniswap V2 ETH->Token swap opportunity.
+   * Analyze a pending transaction hash for DEX swap opportunities.
+   * Supports Uniswap V2, Sushiswap, and Curve V2 (MVP).
    * Returns an Opportunity object or null if not relevant / undecodable.
    */
   public async analyzeTransaction(txHash: string): Promise<Opportunity | null> {
@@ -39,7 +47,23 @@ export class OpportunityIdentifier {
 
       if (!tx.to) return null; // contract creation / unknown
 
-      if (tx.to.toLowerCase() !== UNISWAP_V2_ROUTER_ADDRESS) return null; // not router
+      const toLower = tx.to.toLowerCase();
+      let dex: string | null = null;
+      let iface: Interface | null = null;
+
+      // Check which DEX router this is
+      if (toLower === DEX_ROUTERS.UNISWAP_V2) {
+        dex = 'uniswap_v2';
+        iface = uniswapIface;
+      } else if (toLower === DEX_ROUTERS.SUSHISWAP) {
+        dex = 'sushiswap';
+        iface = sushiswapIface;
+      } else if (toLower === DEX_ROUTERS.CURVE_V2) {
+        dex = 'curve_v2';
+        iface = curveIface;
+      } else {
+        return null; // Not a supported DEX
+      }
 
       if (!tx.data || tx.data === '0x') return null; // no call data
 
@@ -67,7 +91,8 @@ export class OpportunityIdentifier {
         tokenOut,
         path,
         amountInWei,
-        functionSelector: SWAP_EXACT_ETH_FOR_TOKENS_SELECTOR
+        functionSelector: SWAP_EXACT_ETH_FOR_TOKENS_SELECTOR,
+        dex
       };
     } catch (err) {
       // Swallow errors for robustness, log optionally

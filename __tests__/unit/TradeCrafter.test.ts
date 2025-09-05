@@ -25,7 +25,8 @@ describe('TradeCrafter (unit)', () => {
     tokenOut: TOKEN,
     path: [WETH_ADDRESS, TOKEN],
     amountInWei: 1000000000000000000n,
-    functionSelector: '0x7ff36ab5'
+    functionSelector: '0x7ff36ab5',
+    dex: 'uniswap_v2'
   };
 
   test('craftBackrun returns unsigned tx with expected amountIn fraction', async () => {

@@ -1,4 +1,4 @@
-import { OpportunityIdentifier, UNISWAP_V2_ROUTER_ADDRESS, WETH_ADDRESS } from '../../src/OpportunityIdentifier';
+import { OpportunityIdentifier, DEX_ROUTERS, WETH_ADDRESS } from '../../src/OpportunityIdentifier';
 import { Interface } from 'ethers';
 
 // Minimal ethers Provider mock interface we use
@@ -7,7 +7,6 @@ interface MockProvider {
 }
 
 describe('OpportunityIdentifier (unit)', () => {
-  console.log('[unit][OpportunityIdentifier] Suite start');
   const makeProvider = (tx: any | null): MockProvider => ({
     getTransaction: jest.fn().mockResolvedValue(tx)
   });
@@ -17,42 +16,90 @@ describe('OpportunityIdentifier (unit)', () => {
   ]);
 
   test('identifies a Uniswap V2 swapExactETHForTokens opportunity', async () => {
-    console.log('[unit][OpportunityIdentifier] Test start: identifies swapExactETHForTokens');
     const dummyHash = '0xhash1';
-
-  console.log('[unit] preparing mock swapExactETHForTokens transaction for hash', dummyHash);
-
     const path = [WETH_ADDRESS, '0x1111111111111111111111111111111111111111'];
     const encodedData = iface.encodeFunctionData('swapExactETHForTokens', [
-      0n, // amountOutMin
+      0n,
       path,
-      '0x2222222222222222222222222222222222222222', // to
-      BigInt(Math.floor(Date.now() / 1000) + 600) // deadline
+      '0x2222222222222222222222222222222222222222',
+      BigInt(Math.floor(Date.now() / 1000) + 600)
     ]);
 
     const mockTx = {
       hash: dummyHash,
-      to: UNISWAP_V2_ROUTER_ADDRESS,
+      to: DEX_ROUTERS.UNISWAP_V2,
       data: encodedData,
       value: 1234567890n
     };
 
-  console.log('[unit] mock transaction prepared with path', path, 'and value', mockTx.value.toString());
     const provider = makeProvider(mockTx) as any;
     const oi = new OpportunityIdentifier(provider);
-
-  console.log('[unit] calling analyzeTransaction for', dummyHash);
     const result = await oi.analyzeTransaction(dummyHash);
-  console.log('[unit] analyzeTransaction result:', result);
+    
     expect(result).not.toBeNull();
     expect(result?.hash).toBe(dummyHash);
     expect(result?.path).toEqual(path);
     expect(result?.amountInWei).toBe(mockTx.value);
-    console.log('[unit][OpportunityIdentifier] Assertions passed for positive identification');
+    expect(result?.dex).toBe('uniswap_v2');
+  });
+
+  test('identifies a Sushiswap swapExactETHForTokens opportunity', async () => {
+    const dummyHash = '0xhash_sushi';
+    const path = [WETH_ADDRESS, '0x1111111111111111111111111111111111111111'];
+    const encodedData = iface.encodeFunctionData('swapExactETHForTokens', [
+      0n,
+      path,
+      '0x2222222222222222222222222222222222222222',
+      BigInt(Math.floor(Date.now() / 1000) + 600)
+    ]);
+
+    const mockTx = {
+      hash: dummyHash,
+      to: DEX_ROUTERS.SUSHISWAP,
+      data: encodedData,
+      value: 1234567890n
+    };
+
+    const provider = makeProvider(mockTx) as any;
+    const oi = new OpportunityIdentifier(provider);
+    const result = await oi.analyzeTransaction(dummyHash);
+    
+    expect(result).not.toBeNull();
+    expect(result?.hash).toBe(dummyHash);
+    expect(result?.path).toEqual(path);
+    expect(result?.amountInWei).toBe(mockTx.value);
+    expect(result?.dex).toBe('sushiswap');
+  });
+
+  test('identifies a Curve V2 swapExactETHForTokens opportunity', async () => {
+    const dummyHash = '0xhash_curve';
+    const path = [WETH_ADDRESS, '0x1111111111111111111111111111111111111111'];
+    const encodedData = iface.encodeFunctionData('swapExactETHForTokens', [
+      0n,
+      path,
+      '0x2222222222222222222222222222222222222222',
+      BigInt(Math.floor(Date.now() / 1000) + 600)
+    ]);
+
+    const mockTx = {
+      hash: dummyHash,
+      to: DEX_ROUTERS.CURVE_V2,
+      data: encodedData,
+      value: 1234567890n
+    };
+
+    const provider = makeProvider(mockTx) as any;
+    const oi = new OpportunityIdentifier(provider);
+    const result = await oi.analyzeTransaction(dummyHash);
+    
+    expect(result).not.toBeNull();
+    expect(result?.hash).toBe(dummyHash);
+    expect(result?.path).toEqual(path);
+    expect(result?.amountInWei).toBe(mockTx.value);
+    expect(result?.dex).toBe('curve_v2');
   });
 
   test('returns null for non-swap transaction', async () => {
-    console.log('[unit][OpportunityIdentifier] Test start: returns null for non-swap');
     const dummyHash = '0xhash2';
     const mockTx = {
       hash: dummyHash,
@@ -61,13 +108,9 @@ describe('OpportunityIdentifier (unit)', () => {
       data: '0x'
     };
 
-  console.log('[unit] preparing mock non-swap transaction for hash', dummyHash);
     const provider = makeProvider(mockTx) as any;
     const oi = new OpportunityIdentifier(provider);
-  console.log('[unit] calling analyzeTransaction for', dummyHash);
-  const result = await oi.analyzeTransaction(dummyHash);
-  console.log('[unit] analyzeTransaction result for non-swap:', result);
-  expect(result).toBeNull();
-  console.log('[unit][OpportunityIdentifier] Assertion passed for null case');
+    const result = await oi.analyzeTransaction(dummyHash);
+    expect(result).toBeNull();
   });
 });

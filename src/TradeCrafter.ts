@@ -1,5 +1,5 @@
 import { Contract, Interface, Provider, TransactionRequest, ZeroAddress } from 'ethers';
-import { Opportunity, UNISWAP_V2_ROUTER_ADDRESS, WETH_ADDRESS } from './OpportunityIdentifier';
+import { Opportunity, DEX_ROUTERS, WETH_ADDRESS } from './OpportunityIdentifier';
 
 // Uniswap V2 constants
 const UNISWAP_V2_FACTORY = '0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f';
@@ -122,7 +122,7 @@ export class TradeCrafter {
       ]);
 
       const tx: TransactionRequest = {
-        to: UNISWAP_V2_ROUTER_ADDRESS,
+        to: DEX_ROUTERS.UNISWAP_V2,
         data,
         // gasLimit left undefined for estimation later
         // value: undefined because it's token->token
