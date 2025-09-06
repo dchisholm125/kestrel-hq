@@ -42,7 +42,7 @@ export class TradeCrafter {
    *  - Compute expected WETH output using Uniswap V2 formula with 0.3% fee.
    *  - If output > 0, build unsigned tx calling Router.swapExactTokensForTokens.
    */
-  public async craftBackrun(opportunity: Opportunity, executorAddress?: string): Promise<TransactionRequest | null> {
+  public async craftBackrun(opportunity: Opportunity, executorAddress?: string, options?: { amountInWei?: bigint }): Promise<TransactionRequest | null> {
     try {
       // Only handle simple 2-token path (WETH -> TOKEN) to reverse (TOKEN -> WETH)
       if (opportunity.path.length !== 2) return null;
@@ -84,33 +84,71 @@ export class TradeCrafter {
         return null; // mismatch
       }
 
-      // Simple heuristic for amountInBackrun (tokenOut -> tokenIn): take a small fraction of tokenOut reserve.
-      // A realistic approach would replicate original swap math; for MVP we pick 0.1% of reserveTokenOut.
-      const fractionBps = 10n; // 0.1% = 10 basis points heuristic upper bound
-      let amountInTokenOut = (reserveTokenOut * fractionBps) / 10000n;
+      // 1) Simulate the victim swap (WETH -> tokenOut) to get post-trade reserves
+      const victimEthIn = opportunity.amountInWei ?? 0n;
+      if (victimEthIn <= 0n) return null;
+      const { amountOut: victimTokenOutOut, newReserveIn: postEthReserve, newReserveOut: postTokenReserve } =
+        this.simulateSwapExactIn(reserveTokenIn, reserveTokenOut, victimEthIn);
+      if (victimTokenOutOut <= 0n) return null;
 
-      // Fetch actual wallet balance of tokenOut (the token we will spend)
+      // 2) Oracle price (fair market) in WETH per token using pre-victim mid price (MVP via pool reserves)
+      const fairPriceWethPerToken = this.getMidPriceWethPerToken(reserveTokenIn, reserveTokenOut);
+      if (fairPriceWethPerToken <= 0n) return null;
+
+      // 3) Choose optimal back-run amount (TOKEN -> WETH) under our balance via binary search maximization
       const walletBalance = await this.getTokenBalance(tokenOut, executorAddress);
+      if (walletBalance <= 0n) return null;
 
-      // Cap by actual balance to avoid TRANSFER_FROM_FAILED
-      if (amountInTokenOut > walletBalance) {
-        amountInTokenOut = walletBalance;
+      let amountInTokenOut: bigint;
+      let expectedWethOut: bigint;
+      let expectedProfitWeth: bigint;
+
+      if (options?.amountInWei && options.amountInWei > 0n) {
+        // Use provided amountInWei
+        amountInTokenOut = options.amountInWei > walletBalance ? walletBalance : options.amountInWei;
+        const { amountOut } = this.simulateSwapExactIn(postTokenReserve, postEthReserve, amountInTokenOut);
+        expectedWethOut = amountOut;
+        const cost = (amountInTokenOut * fairPriceWethPerToken) / 10_000_000_000_000_000_000n;
+        expectedProfitWeth = amountOut - cost;
+      } else {
+        // Use optimizer
+        const maxSell = walletBalance;
+        const optimizer = this.maximizeProfitTokenSell(
+          maxSell,
+          postTokenReserve,
+          postEthReserve,
+          fairPriceWethPerToken
+        );
+        amountInTokenOut = optimizer.bestAmountIn;
+        expectedWethOut = optimizer.expectedWethOut;
+        expectedProfitWeth = optimizer.expectedProfitWeth;
+
+        // Fallback: try a small fraction (0.1%) of post-token reserve if optimizer yields zero
+        if (amountInTokenOut <= 0n) {
+          const candidate = postTokenReserve / 1000n; // 0.1%
+          if (candidate > 0n) {
+            const { amountOut } = this.simulateSwapExactIn(postTokenReserve, postEthReserve, candidate);
+            const cost = (candidate * fairPriceWethPerToken) / 10_000_000_000_000_000_000n;
+            const profit = amountOut - cost;
+            if (profit > 0n) {
+              amountInTokenOut = candidate;
+              expectedWethOut = amountOut;
+              expectedProfitWeth = profit;
+            }
+          }
+        }
       }
 
-      if (amountInTokenOut === 0n) return null; // nothing to trade
+      if (amountInTokenOut <= 0n || expectedWethOut <= 0n) return null;
 
-      // Uniswap V2 getAmountOut formula with 0.3% fee: amountOut = amountIn * 997 * reserveOut / (reserveIn*1000 + amountIn*997)
-      const amountInWithFee = amountInTokenOut * 997n;
-      const numerator = amountInWithFee * reserveTokenIn;
-      const denominator = reserveTokenOut * 1000n + amountInWithFee;
-      const amountOutExpected = numerator / denominator;
-      if (amountOutExpected <= 0) return null;
+      // 4) Gas estimation and profitability check: proceed only if expected profit exceeds gas cost
+      const routerAddress = this.pickRouterAddress(opportunity.dex);
+      if (!routerAddress) return null;
 
-      // Build calldata for swapExactTokensForTokens (TOKEN -> WETH)
-  const reversePath = [tokenOut, tokenIn];
-  const amountIn = amountInTokenOut;
-      const amountOutMin = (amountOutExpected * 95n) / 100n; // 5% slippage buffer
-      const to = await this.getRecipient();
+      const reversePath = [tokenOut, tokenIn];
+      const amountIn = amountInTokenOut;
+      const amountOutMin = (expectedWethOut * 995n) / 1000n; // 0.5% slippage buffer
+      const to = executorAddress; // send proceeds to executor
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 5);
 
       const data = routerIface.encodeFunctionData('swapExactTokensForTokens', [
@@ -121,14 +159,34 @@ export class TradeCrafter {
         deadline
       ]);
 
-      const tx: TransactionRequest = {
-        to: DEX_ROUTERS.UNISWAP_V2,
+      const unsignedTx: TransactionRequest = {
+        to: routerAddress,
         data,
-        // gasLimit left undefined for estimation later
-        // value: undefined because it's token->token
+        from: executorAddress,
+        value: 0n
       };
 
-      return tx;
+      // Estimate gas and fee
+      let estimatedGasCostWei: bigint | null = null;
+      try {
+        const gas = await this.provider.estimateGas(unsignedTx);
+        const feeData = await this.provider.getFeeData();
+        const gasPrice = (feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n) as bigint;
+        if (gas && gasPrice && gasPrice > 0n) {
+          estimatedGasCostWei = (gas as unknown as bigint) * gasPrice;
+        }
+      } catch (_) {
+        // ignore; if we cannot estimate gas cost, be conservative and skip
+        estimatedGasCostWei = null;
+      }
+
+      if (estimatedGasCostWei === null) return null;
+
+  if (expectedProfitWeth < estimatedGasCostWei) {
+        return null; // Not profitable after gas
+      }
+
+      return unsignedTx;
     } catch (err) {
       // console.debug('[TradeCrafter] craftBackrun error', err);
       return null;
@@ -166,10 +224,72 @@ export class TradeCrafter {
     }
   }
 
-  private async getRecipient(): Promise<string> {
-    // For MVP we direct profits to WETH holder or a fixed address; using factory address as placeholder is NOT correct
-    // TODO: accept signer or recipient in constructor; for now use factory (harmless placeholder for unsigned tx)
-    return UNISWAP_V2_FACTORY;
+  // Compute mid price in WETH per token from reserves (pre-trade fair price)
+  private getMidPriceWethPerToken(reserveWeth: bigint, reserveToken: bigint): bigint {
+    if (reserveToken === 0n) return 0n;
+    return (reserveWeth * 10_000_000_000_000_000_000n) / reserveToken; // scale by 1e18 to preserve precision
+  }
+
+  // Simulate Uniswap V2 swapExactTokensForTokens amountOut and resulting reserves.
+  private simulateSwapExactIn(
+    reserveIn: bigint,
+    reserveOut: bigint,
+    amountIn: bigint
+  ): { amountOut: bigint; newReserveIn: bigint; newReserveOut: bigint } {
+    if (amountIn <= 0n || reserveIn <= 0n || reserveOut <= 0n) {
+      return { amountOut: 0n, newReserveIn: reserveIn, newReserveOut: reserveOut };
+    }
+    const amountInWithFee = amountIn * 997n;
+    const numerator = amountInWithFee * reserveOut;
+    const denominator = reserveIn * 1000n + amountInWithFee;
+    const amountOut = numerator / denominator;
+    const newReserveIn = reserveIn + amountIn;
+    const newReserveOut = reserveOut - amountOut;
+    return { amountOut, newReserveIn, newReserveOut };
+  }
+
+  // Find the tokenOut amount to sell that maximizes profit: profit(x) = WETH_out_postVictim(x) - x * fairPrice
+  // Robust grid search over [0, cap] to avoid pathological rounding; cap is limited by reserves.
+  private maximizeProfitTokenSell(
+    maxSell: bigint,
+    postTokenReserve: bigint,
+    postEthReserve: bigint,
+    fairPriceWethPerTokenScaled: bigint // scaled by 1e18
+  ): { bestAmountIn: bigint; expectedWethOut: bigint; expectedProfitWeth: bigint } {
+    if (maxSell <= 0n || postTokenReserve <= 0n || postEthReserve <= 0n) {
+      return { bestAmountIn: 0n, expectedWethOut: 0n, expectedProfitWeth: 0n };
+    }
+
+    const cap = maxSell < postTokenReserve / 2n ? maxSell : postTokenReserve / 2n;
+    if (cap <= 0n) return { bestAmountIn: 0n, expectedWethOut: 0n, expectedProfitWeth: 0n };
+
+    let bestX = 0n;
+    let bestProfit = 0n;
+    let bestWethOut = 0n;
+
+    const steps = 64n;
+    for (let i = 1n; i <= steps; i++) {
+      const x = (cap * i) / steps; // linear grid
+      if (x <= 0n) continue;
+      const { amountOut } = this.simulateSwapExactIn(postTokenReserve, postEthReserve, x);
+      const cost = (x * fairPriceWethPerTokenScaled) / 10_000_000_000_000_000_000n;
+      const profit = amountOut - cost;
+      if (profit > bestProfit) {
+        bestProfit = profit;
+        bestX = x;
+        bestWethOut = amountOut;
+      }
+    }
+
+    return { bestAmountIn: bestX, expectedWethOut: bestWethOut, expectedProfitWeth: bestProfit };
+  }
+
+  private pickRouterAddress(dex: string | null): string | null {
+    if (!dex) return null;
+    const d = dex.toLowerCase();
+    if (d === 'uniswap_v2') return DEX_ROUTERS.UNISWAP_V2;
+    if (d === 'sushiswap') return DEX_ROUTERS.SUSHISWAP;
+    return null; // unsupported
   }
 }
 
