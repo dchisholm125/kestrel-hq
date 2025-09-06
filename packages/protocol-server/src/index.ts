@@ -207,6 +207,33 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
 
 // register new endpoints for intentStore and validator
 
+/* TESTING:
+
+1. Compute timestamp, body-sha, and signature (Node snippet):
+
+node -e "const crypto=require('crypto'); \
+apiKey='k'; ts=Date.now().toString(); \
+body={intent_id:'id2',target_chain:'eth-mainnet',deadline_ms:9999}; \
+bodySha=crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex'); \
+payload=[apiKey,ts,bodySha].join(':'); \
+sig=crypto.createHmac('sha256','s3cret').update(payload).digest('hex'); \
+console.log(ts); console.log(bodySha); console.log(sig); console.log(JSON.stringify(body))"
+
+2. Call the endpoint with computed values (replace timestamp/signature with the output from step 1):
+
+curl -v -X POST http://localhost:4000/v1/submit-intent \
+  -H "Content-Type: application/json" \
+  -H "X-Kestrel-ApiKey: k" \
+  -H "X-Kestrel-Timestamp: <TIMESTAMP_FROM_STEP1>" \
+  -H "X-Kestrel-Signature: <SIGNATURE_FROM_STEP1>" \
+  -d '{"intent_id":"id2","target_chain":"eth-mainnet","deadline_ms":9999}'
+
+3. Repeat same request to verify idempotency (should return same correlation_id/request_hash):
+
+# same curl as above; response should match the first
+
+*/
+
 // POST /v1/submit-intent - idempotent intent submission
 app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   const metrics = MetricsTracker.getInstance()
