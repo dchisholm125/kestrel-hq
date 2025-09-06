@@ -1,0 +1,11 @@
+{
+  "name": "@kestrel/tests-cross-pkg",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "node test/sdk-to-server.test.js"
+  }
+  ,"devDependencies": {
+    "node-fetch": "^2.6.12"
+  }
+}
