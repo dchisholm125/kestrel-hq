@@ -8,6 +8,8 @@ export interface MetricsStats {
   countProcessingSamples: number
 }
 
+import client from 'prom-client'
+
 export class MetricsTracker {
   private static instance: MetricsTracker
   private submissionsReceived = 0
@@ -15,7 +17,18 @@ export class MetricsTracker {
   private submissionsRejected = 0
   private processingTimes: number[] = []
 
-  private constructor() {}
+  // Prometheus metrics
+  private intentsCounter: client.Counter<string>
+  private errorsCounter: client.Counter<string>
+
+  private constructor() {
+    // create or reuse registry default
+    const register = client.register
+    client.collectDefaultMetrics({ register })
+
+    this.intentsCounter = new client.Counter({ name: 'kestrel_intents_total', help: 'Total intents', labelNames: ['decision'] })
+    this.errorsCounter = new client.Counter({ name: 'kestrel_errors_total', help: 'Total errors', labelNames: ['reason_code'] })
+  }
 
   static getInstance(): MetricsTracker {
     if (!MetricsTracker.instance) MetricsTracker.instance = new MetricsTracker()
@@ -23,8 +36,9 @@ export class MetricsTracker {
   }
 
   incrementReceived(count = 1) { this.submissionsReceived += count }
-  incrementAccepted(count = 1) { this.submissionsAccepted += count }
-  incrementRejected(count = 1) { this.submissionsRejected += count }
+  incrementAccepted(count = 1) { this.submissionsAccepted += count; this.intentsCounter.inc({ decision: 'accepted' }, count) }
+  incrementRejected(count = 1) { this.submissionsRejected += count; this.intentsCounter.inc({ decision: 'rejected' }, count) }
+  recordError(reason_code: string, count = 1) { this.errorsCounter.inc({ reason_code }, count) }
   recordProcessingTime(ms: number) { if (ms >= 0 && Number.isFinite(ms)) this.processingTimes.push(ms) }
 
   getStats(): MetricsStats {
@@ -49,6 +63,8 @@ export class MetricsTracker {
       countProcessingSamples: this.processingTimes.length,
     }
   }
+
+  getPromMetrics() { return client.register.metrics() }
 }
 
 export default MetricsTracker

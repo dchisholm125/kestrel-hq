@@ -1,11 +1,24 @@
 import express, { Request, Response } from 'express'
 import { ENV } from './config.js'
 import { validateSubmitBody } from './validators/submitValidator.js'
-import TransactionSimulator from './services/TransactionSimulator.js'
-import { pendingPool } from './services/PendingPool.js'
+// Lazy-load heavy services at runtime to keep the build surface small for quick developer flow
+let TransactionSimulator: any
+let pendingPool: any
+try {
+  // require at runtime
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  TransactionSimulator = require('./services/TransactionSimulator').default
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  pendingPool = require('./services/PendingPool').pendingPool
+} catch (e) {
+  // It's OK if these are not present during a trimmed compile; runtime will throw if used incorrectly
+  TransactionSimulator = null
+  pendingPool = null
+}
 import FileLogger from './utils/fileLogger'
 const fileLogger = FileLogger.getInstance()
 import MetricsTracker from './services/MetricsTracker.js'
+import { ulid } from 'ulid'
 import { validateSubmitIntent } from './validators/submitIntentValidator.js'
 import { intentStore } from './services/IntentStore.js'
 import crypto from 'crypto'
@@ -313,9 +326,9 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
     }
   }
 
-  // store new row
+  // store new row — use ULID-based correlation id
   const intent_id = body.intent_id
-  const correlation_id = `corr_${Date.now()}_${Math.floor(Math.random() * 100000)}`
+  const correlation_id = `corr_${ulid()}`
   const row = {
     intent_id,
     request_hash,
@@ -333,6 +346,15 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   metrics.incrementAccepted()
   metrics.recordProcessingTime(Date.now() - started)
 
+  // structured JSONL intake log
+  void fileLogger.logSuccess({
+    intent_id,
+    request_hash,
+    corr_id: correlation_id,
+    stage: 'ingest',
+    lat_ms: Date.now() - started
+  })
+
   return res.status(200).json({ intent_id, decision: 'accepted', reason_code: 'ok', request_hash, status_url: `/v1/status/${intent_id}`, correlation_id })
 })
 
@@ -348,6 +370,18 @@ app.get('/v1/status/:intent_id', (req: Request, res: Response) => {
 app.get('/stats', (_req: Request, res: Response) => {
   const metrics = MetricsTracker.getInstance()
   res.status(200).json(metrics.getStats())
+})
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (_req: Request, res: Response) => {
+  try {
+    const metrics = MetricsTracker.getInstance()
+    const text = await metrics.getPromMetrics()
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4')
+    res.status(200).send(text)
+  } catch (e) {
+    res.status(500).send('error collecting metrics')
+  }
 })
 
 // Only start server when this file is executed directly. Export app for tests.

@@ -37,7 +37,7 @@ class FileLogger {
       const entry = {
         timestamp: new Date().toISOString(),
         type,
-        ...data
+  ...data
       }
       const line = JSON.stringify(entry)
       await fs.appendFile(filePath, line + '\n')
@@ -50,17 +50,17 @@ class FileLogger {
 
   /** Log an accepted submission (guardian ACCEPT) */
   public async logSuccess(data: Record<string, unknown>): Promise<void> {
-    return this.writeLine('success_log.jsonl', 'success', data)
+  return this.writeLine('success_log.jsonl', 'success', data)
   }
 
   /** Log a rejected submission (guardian REJECT) */
   public async logRejection(data: Record<string, unknown>): Promise<void> {
-    return this.writeLine('rejected_log.jsonl', 'rejection', data)
+  return this.writeLine('rejected_log.jsonl', 'rejection', data)
   }
 
   /** Log a simulation failure (guardian error) */
   public async logFailure(data: Record<string, unknown>): Promise<void> {
-    return this.writeLine('failure_log.jsonl', 'failure', data)
+  return this.writeLine('failure_log.jsonl', 'failure', data)
   }
 }
 

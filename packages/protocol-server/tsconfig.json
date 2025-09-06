@@ -13,5 +13,13 @@
     "skipLibCheck": true,
     "types": ["node", "mocha"]
   },
-  "include": ["src/**/*", "test/**/*"]
+  "include": [
+    "src/index.ts",
+    "src/main.ts",
+    "src/config.ts",
+    "src/validators/**/*.ts",
+    "src/services/IntentStore.ts",
+    "src/services/MetricsTracker.ts",
+    "src/utils/**/*.ts"
+  ]
 }

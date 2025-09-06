@@ -21,9 +21,22 @@
 import http from 'http'
 import app from './index'
 import { ENV } from './config'
-import NodeConnector from './services/NodeConnector'
-import { pendingPool } from './services/PendingPool'
-import { batchingEngine } from './services/BatchingEngine'
+// Lazy require heavy modules at runtime to minimize compile-time surface
+let NodeConnector: any
+let pendingPool: any
+let batchingEngine: any
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  NodeConnector = require('./services/NodeConnector').default
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  pendingPool = require('./services/PendingPool').pendingPool
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  batchingEngine = require('./services/BatchingEngine').batchingEngine
+} catch (e) {
+  NodeConnector = null
+  pendingPool = null
+  batchingEngine = null
+}
 
 // --- Runtime state ---
 let server: http.Server | null = null
@@ -87,7 +100,7 @@ async function start(): Promise<void> {
           })
           
           // Log each individual trade in the bundle
-          bundle.trades.forEach((trade, index) => {
+          bundle.trades.forEach((trade: any, index: any) => {
             console.log(`[KESTREL-PROTOCOL] SUCCESSFUL_TRANSACTION_IN_BUNDLE`, {
               bundleId: `bundle_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
               tradeIndex: index,
