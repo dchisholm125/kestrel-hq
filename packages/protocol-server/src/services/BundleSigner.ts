@@ -1,0 +1,139 @@
+import * as ethers from 'ethers'
+import { GreedyBundleResult, BundleCandidate } from './BatchingEngine'
+
+export interface Bundle {
+  trades: BundleCandidate[]
+  totalGas: bigint
+  totalNetProfitWei: bigint
+}
+
+export interface Call {
+  target: string
+  value: string | number | bigint
+  data: string
+}
+
+/**
+ * BundleSigner - Creates and signs transactions that call the BatchExecutor contract
+ * to execute bundles of trades atomically.
+ */
+export class BundleSigner {
+  private wallet: ethers.Wallet
+  private batchExecutorAddress: string
+  private provider?: ethers.Provider
+
+  constructor(privateKey: string, batchExecutorAddress: string, provider?: ethers.Provider) {
+    this.wallet = new ethers.Wallet(privateKey, provider)
+    this.batchExecutorAddress = batchExecutorAddress
+    this.provider = provider
+  }
+
+  /**
+   * Takes a bundle and creates a signed transaction that calls executeBatch on the BatchExecutor contract
+   */
+  async signBundle(bundle: Bundle | GreedyBundleResult): Promise<string> {
+    // Convert trades to Call structs for the BatchExecutor
+    const calls = this.bundleToCalls(bundle.trades)
+    console.log(`[BundleSigner] Created ${calls.length} calls from ${bundle.trades.length} trades`)
+    
+    // Create the contract interface
+    const batchExecutorAbi = [
+      'function executeBatch((address target, uint256 value, bytes data)[] calls) external payable returns (bytes[] memory results)'
+    ]
+    const iface = new ethers.Interface(batchExecutorAbi)
+    
+    // Encode the function call
+    const data = iface.encodeFunctionData('executeBatch', [calls])
+    console.log(`[BundleSigner] Encoded function data length: ${data.length}`)
+    
+    // Get chain ID from provider if available
+    let chainId = 1 // Default to mainnet
+    if (this.provider) {
+      try {
+        const network = await this.provider.getNetwork()
+        chainId = Number(network.chainId)
+      } catch (error) {
+        console.warn('[BundleSigner] chain ID fetch failed, using default:', error)
+      }
+    }
+    
+    // Estimate gas if provider is available
+    let gasLimit = 500000n // Default fallback
+    if (this.provider) {
+      try {
+        console.log(`[BundleSigner] Estimating gas for BatchExecutor call...`)
+        const estimated = await this.provider.estimateGas({
+          to: this.batchExecutorAddress,
+          data,
+          from: this.wallet.address
+        })
+        gasLimit = estimated + (estimated / 10n) // Add 10% buffer
+        console.log(`[BundleSigner] Gas estimation successful: ${gasLimit}`)
+      } catch (error) {
+        console.warn('[BundleSigner] gas estimation failed, using fallback:', error)
+      }
+    }
+
+    // Get current nonce if provider is available
+    let nonce = 0
+    if (this.provider) {
+      try {
+        nonce = await this.provider.getTransactionCount(this.wallet.address, 'pending')
+      } catch (error) {
+        console.warn('[BundleSigner] nonce fetch failed, using 0:', error)
+      }
+    }
+
+    // Get appropriate gas price if provider is available
+    let gasPrice = 1000000000n // Default 1 gwei
+    if (this.provider) {
+      try {
+        const feeData = await this.provider.getFeeData()
+        if (feeData.gasPrice) {
+          gasPrice = feeData.gasPrice
+        }
+      } catch (error) {
+        console.warn('[BundleSigner] gas price fetch failed, using default:', error)
+      }
+    }
+
+    // Create the transaction
+    const tx = {
+      to: this.batchExecutorAddress,
+      data,
+      gasLimit,
+      gasPrice,
+      nonce,
+      value: 0, // No ETH being sent directly
+      type: 1, // Legacy transaction type for simplicity
+      chainId
+    }
+
+    // Sign the transaction
+    const signedTx = await this.wallet.signTransaction(tx)
+    return signedTx
+  }
+
+  /**
+   * Converts bundle trades to BatchExecutor Call structs
+   */
+  private bundleToCalls(trades: BundleCandidate[]): Call[] {
+    return trades.map(trade => {
+      // Parse the raw transaction to extract call details
+      const parsedTx = ethers.Transaction.from(trade.rawTransaction)
+      
+      return {
+        target: parsedTx.to || ethers.ZeroAddress,
+        value: parsedTx.value || 0,
+        data: parsedTx.data || '0x'
+      }
+    })
+  }
+
+  /**
+   * Get the signer's address
+   */
+  get address(): string {
+    return this.wallet.address
+  }
+}
