@@ -34,6 +34,8 @@ export const ENV = {
   QUICKNODE_WS_URL: process.env.QUICKNODE_WS_URL || '',
   WS_RPC_URL: process.env.WS_RPC_URL || '',
   API_SERVER_PORT: process.env.API_SERVER_PORT ? Number(process.env.API_SERVER_PORT) : 4000,
+  SKIP_SIGNATURE_CHECK: process.env.SKIP_SIGNATURE_CHECK === '1' || process.env.SKIP_SIGNATURE_CHECK === 'true',
+  API_SECRET: process.env.API_SECRET || '',
   ARB_SENTINEL: process.env.ARB_SENTINEL || '',
   FLASHBOTS_RELAY_URL: process.env.FLASHBOTS_RELAY_URL || 'https://relay.flashbots.net',
   FLASHBOTS_SIGNING_KEY: process.env.FLASHBOTS_SIGNING_KEY || '',

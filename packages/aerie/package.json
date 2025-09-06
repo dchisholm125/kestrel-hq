@@ -18,7 +18,8 @@
   "dependencies": {
     "ethers": "^6.13.1",
     "axios": "^1.6.8",
-    "ws": "^8.18.0"
+  "ws": "^8.18.0",
+  "@kestrel/protocol-sdk": "file:../protocol-sdk"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

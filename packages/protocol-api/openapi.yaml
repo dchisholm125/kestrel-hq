@@ -1,0 +1,94 @@
+openapi: 3.0.3
+info:
+  title: Kestrel Protocol API
+  version: 0.2.0-rc1
+servers: [{ url: http://localhost:8080 }]
+paths:
+  /v1/submit-intent:
+    post:
+      summary: Idempotent intent submission
+      parameters:
+        - name: X-Kestrel-ApiKey; in: header; required: true; schema: { type: string }
+        - name: X-Kestrel-Timestamp; in: header; required: true; schema: { type: string }
+        - name: X-Kestrel-Signature; in: header; required: true; schema: { type: string }
+        - name: Idempotency-Key; in: header; required: false; schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubmitIntent' }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/SubmitResp' }}}}
+        '4XX': { description: client error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResp' }}}}
+  /v1/status/{intent_id}:
+    get:
+      summary: Poll intent status
+      parameters:
+        - name: intent_id; in: path; required: true; schema: { type: string }
+      responses:
+        '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/StatusResp' }}}}
+components:
+  schemas:
+    SubmitIntent:
+      type: object
+      required: [intent_id, target_chain, deadline_ms]
+      properties:
+        intent_id: { type: string }
+        target_chain: { type: string, enum: [eth-mainnet] }
+        target_block: { type: integer, nullable: true }
+        deadline_ms: { type: integer, minimum: 1 }
+        max_calldata_bytes: { type: integer, default: 120000 }
+        constraints:
+          type: object
+          properties:
+            min_net_wei: { type: string }
+            max_staleness_ms: { type: integer, default: 300 }
+            revert_shield: { type: boolean, default: true }
+        txs:
+          type: array
+          items: { type: string }   # opaque blobs for now
+        meta:
+          type: object
+          properties:
+            strategy_kind: { type: string }
+            notes: { type: string }
+    SubmitResp:
+      type: object
+      required: [intent_id, decision, reason_code, request_hash, status_url, correlation_id]
+      properties:
+        intent_id: { type: string }
+        decision: { type: string, enum: [accepted, queued, rejected, throttled] }
+        reason_code: { type: string }
+        request_hash: { type: string }
+        status_url: { type: string }
+        correlation_id: { type: string }
+    StatusResp:
+      type: object
+      required: [intent_id, state, reason_code]
+      properties:
+        intent_id: { type: string }
+        state:
+          type: string
+          enum: [RECEIVED, SCREENED, SNAPSHOT, FAST_SIM, SELECTED, BUNDLING, SUBMITTED, INCLUDED, DROPPED, REJECTED]
+        reason_code: { type: string }
+        sim_summary:
+          type: object
+          nullable: true
+          properties:
+            gross_profit_wei: { type: string }
+            gas_used: { type: integer }
+            basefee_wei: { type: string }
+            tip_wei: { type: string }
+            net_wei: { type: string }
+        bundle_id: { type: string, nullable: true }
+        relay_submissions: { type: array, items: { type: object }, nullable: true }
+        timestamps_ms: { type: object, additionalProperties: { type: integer } }
+        correlation_id: { type: string }
+    ErrorResp:
+      type: object
+      required: [reason_code, reason_detail, retryable, suggested_backoff_ms]
+      properties:
+        reason_code: { type: string }
+        reason_detail: { type: string }
+        retryable: { type: boolean }
+        suggested_backoff_ms: { type: integer, default: 0 }

@@ -6,6 +6,9 @@ import { pendingPool } from './services/PendingPool.js'
 import FileLogger from './utils/fileLogger'
 const fileLogger = FileLogger.getInstance()
 import MetricsTracker from './services/MetricsTracker.js'
+import { validateSubmitIntent } from './validators/submitIntentValidator.js'
+import { intentStore } from './services/IntentStore.js'
+import crypto from 'crypto'
 
 const app = express()
 const port = ENV.API_SERVER_PORT || ENV.PORT || 3000
@@ -200,6 +203,88 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
       return res.status(500).json({ error: 'simulation failed' })
     }
   })()
+})
+
+// register new endpoints for intentStore and validator
+
+// POST /v1/submit-intent - idempotent intent submission
+app.post('/v1/submit-intent', async (req: Request, res: Response) => {
+  const metrics = MetricsTracker.getInstance()
+  const started = Date.now()
+
+  // header validation
+  const apiKey = req.header('X-Kestrel-ApiKey')
+  const timestamp = req.header('X-Kestrel-Timestamp')
+  const signature = req.header('X-Kestrel-Signature')
+  const idempotencyKey = req.header('Idempotency-Key')
+
+  if (!apiKey || !timestamp || !signature) {
+    metrics.incrementRejected()
+    metrics.recordProcessingTime(Date.now() - started)
+    return res.status(400).json({ reason_code: 'MISSING_HEADERS', reason_detail: 'required authentication headers missing', retryable: false, suggested_backoff_ms: 0 })
+  }
+
+  // body validation
+  const result = validateSubmitIntent(req.body)
+  if (!result.valid) {
+    metrics.incrementRejected()
+    metrics.recordProcessingTime(Date.now() - started)
+    return res.status(400).json({ reason_code: 'INVALID_BODY', reason_detail: result.error, retryable: false, suggested_backoff_ms: 0 })
+  }
+
+  const body = result.value as any
+
+  // compute canonical hash
+  const request_hash = intentStore.computeHash(body)
+
+  // idempotency: if we've already seen this hash, return the same stored row
+  const existing = intentStore.getByHash(request_hash)
+  if (existing) {
+    metrics.incrementReceived()
+    metrics.recordProcessingTime(Date.now() - started)
+    return res.status(200).json({ intent_id: existing.intent_id, decision: 'accepted', reason_code: existing.reason_code, request_hash: existing.request_hash, status_url: `/v1/status/${existing.intent_id}`, correlation_id: existing.correlation_id })
+  }
+
+  // basic signature check: HMAC-SHA256 over apiKey.timestamp.body using a test secret from ENV (in prod this would be a lookup)
+  // For now accept any signature if ENV.SKIP_SIGNATURE_CHECK is truthy
+  if (!ENV.SKIP_SIGNATURE_CHECK) {
+    const secret = ENV.API_SECRET || 'test-secret'
+    const payload = [apiKey, timestamp, JSON.stringify(body)].join('.')
+    const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex')
+    if (expected !== signature) {
+      metrics.incrementRejected()
+      metrics.recordProcessingTime(Date.now() - started)
+      return res.status(401).json({ reason_code: 'BAD_SIGNATURE', reason_detail: 'signature mismatch', retryable: false, suggested_backoff_ms: 0 })
+    }
+  }
+
+  // store new row
+  const intent_id = body.intent_id
+  const correlation_id = `corr_${Date.now()}_${Math.floor(Math.random() * 100000)}`
+  const row = {
+    intent_id,
+    request_hash,
+    correlation_id,
+    state: 'RECEIVED',
+    reason_code: 'ok',
+    received_at: Date.now(),
+    payload: body,
+  }
+  intentStore.put(row)
+
+  metrics.incrementReceived()
+  metrics.incrementAccepted()
+  metrics.recordProcessingTime(Date.now() - started)
+
+  return res.status(200).json({ intent_id, decision: 'accepted', reason_code: 'ok', request_hash, status_url: `/v1/status/${intent_id}`, correlation_id })
+})
+
+// GET /v1/status/:intent_id - return stored row
+app.get('/v1/status/:intent_id', (req: Request, res: Response) => {
+  const id = req.params.intent_id
+  const row = intentStore.getById(id)
+  if (!row) return res.status(404).json({ reason_code: 'NOT_FOUND', reason_detail: 'intent not found', retryable: false, suggested_backoff_ms: 0 })
+  return res.status(200).json({ intent_id: row.intent_id, state: row.state, reason_code: row.reason_code, sim_summary: null, bundle_id: null, relay_submissions: null, timestamps_ms: { received: row.received_at }, correlation_id: row.correlation_id })
 })
 
 // GET /stats - expose metrics
