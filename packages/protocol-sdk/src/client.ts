@@ -35,9 +35,10 @@ export class ProtocolSDK {
 
   private makeHeaders(body?: string | object, idempotencyKey?: string) {
     const ts = Date.now().toString();
-    const bodyCanonical = body ? (typeof body === 'string' ? body : canonicalize(body)) : ''
-    const payload = [this.cfg.apiKey, ts, bodyCanonical].join('.');
-    const sig = hmacSignature(this.cfg.apiSecret, payload);
+    const bodyString = body ? (typeof body === 'string' ? body : JSON.stringify(body)) : ''
+    const bodySha = crypto.createHash('sha256').update(bodyString).digest('hex')
+    const payload = [this.cfg.apiKey, ts, bodySha].join(':')
+    const sig = hmacSignature(this.cfg.apiSecret, payload)
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Kestrel-ApiKey': this.cfg.apiKey,
