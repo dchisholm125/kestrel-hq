@@ -19,6 +19,8 @@ export type IntentRow = {
 class IntentStore {
   private byId: Map<string, IntentRow> = new Map()
   private byHash: Map<string, IntentRow> = new Map()
+  // idempotency key -> { row, ts }
+  private idempotencyMap: Map<string, { row: IntentRow; ts: number }> = new Map()
 
   getById(id: string) {
     return this.byId.get(id) ?? null
@@ -28,9 +30,32 @@ class IntentStore {
     return this.byHash.get(hash) ?? null
   }
 
+  /**
+   * Return a row for a hash only if it was created within the provided window (ms).
+   */
+  getByHashWithin(hash: string, windowMs: number) {
+    const row = this.byHash.get(hash)
+    if (!row) return null
+    if (Date.now() - row.received_at <= windowMs) return row
+    return null
+  }
+
+  getByIdempotencyKeyWithin(key: string, windowMs: number) {
+    const entry = this.idempotencyMap.get(key)
+    if (!entry) return null
+    if (Date.now() - entry.ts <= windowMs) return entry.row
+    // expired — cleanup
+    this.idempotencyMap.delete(key)
+    return null
+  }
+
   put(row: IntentRow) {
     this.byId.set(row.intent_id, row)
     this.byHash.set(row.request_hash, row)
+  }
+
+  setIdempotencyKey(key: string, row: IntentRow) {
+    this.idempotencyMap.set(key, { row, ts: Date.now() })
   }
 
   computeHash(body: unknown) {

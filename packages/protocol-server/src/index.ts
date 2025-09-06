@@ -237,8 +237,19 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   // compute canonical hash
   const request_hash = intentStore.computeHash(body)
 
-  // idempotency: if we've already seen this hash, return the same stored row
-  const existing = intentStore.getByHash(request_hash)
+  // check idempotency key or recent hash (60s window)
+  const IDEMPOTENCY_WINDOW_MS = 60 * 1000
+  if (idempotencyKey) {
+    const existingByKey = intentStore.getByIdempotencyKeyWithin(idempotencyKey, IDEMPOTENCY_WINDOW_MS)
+    if (existingByKey) {
+      metrics.incrementReceived()
+      metrics.recordProcessingTime(Date.now() - started)
+      return res.status(200).json({ intent_id: existingByKey.intent_id, decision: 'accepted', reason_code: existingByKey.reason_code, request_hash: existingByKey.request_hash, status_url: `/v1/status/${existingByKey.intent_id}`, correlation_id: existingByKey.correlation_id })
+    }
+  }
+
+  // idempotency: if we've already seen this hash recently, return the same stored row
+  const existing = intentStore.getByHashWithin(request_hash, IDEMPOTENCY_WINDOW_MS)
   if (existing) {
     metrics.incrementReceived()
     metrics.recordProcessingTime(Date.now() - started)
@@ -249,7 +260,24 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   // For now accept any signature if ENV.SKIP_SIGNATURE_CHECK is truthy
   if (!ENV.SKIP_SIGNATURE_CHECK) {
     const secret = ENV.API_SECRET || 'test-secret'
-    const payload = [apiKey, timestamp, JSON.stringify(body)].join('.')
+
+    // enforce timestamp skew
+    const tsNum = Number(timestamp)
+    if (Number.isNaN(tsNum)) {
+      metrics.incrementRejected()
+      metrics.recordProcessingTime(Date.now() - started)
+      return res.status(400).json({ reason_code: 'BAD_TIMESTAMP', reason_detail: 'timestamp invalid', retryable: false, suggested_backoff_ms: 0 })
+    }
+    const now = Date.now()
+    if (Math.abs(now - tsNum) > 30_000) {
+      metrics.incrementRejected()
+      metrics.recordProcessingTime(Date.now() - started)
+      return res.status(400).json({ reason_code: 'TIMESTAMP_SKEW', reason_detail: 'timestamp outside allowed skew', retryable: true, suggested_backoff_ms: 1000 })
+    }
+
+    // signature shape: HMAC-SHA256( apiKey || ":" || timestamp || ":" || sha256(body) )
+    const bodySha = crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex')
+    const payload = [apiKey, timestamp, bodySha].join(':')
     const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex')
     if (expected !== signature) {
       metrics.incrementRejected()
@@ -271,6 +299,8 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
     payload: body,
   }
   intentStore.put(row)
+  // record idempotency key mapping if provided
+  if (idempotencyKey) intentStore.setIdempotencyKey(idempotencyKey, row)
 
   metrics.incrementReceived()
   metrics.incrementAccepted()
