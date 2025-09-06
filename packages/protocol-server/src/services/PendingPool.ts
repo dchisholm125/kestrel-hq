@@ -3,6 +3,7 @@
  * A simple in-memory store for validated trades (raw transaction submissions or enriched objects).
  * NOTE: This is an MVP, non-persistent structure. Future upgrades may add TTL eviction, indexing, or database backing.
  */
+import MetricsTracker from './MetricsTracker'
 export type PendingTrade = {
   id: string
   rawTransaction: string
@@ -34,6 +35,16 @@ class PendingPool {
     this.trades.push(trade)
     this.seenHashes.add(h)
     console.info('[PendingPool] trade added', { id: trade.id, txHash: h, total: this.trades.length })
+    // update queue depth metric and per-key inflight where available
+    try {
+      const m = MetricsTracker.getInstance()
+      m.setQueueDepth(this.trades.length)
+      const keyId = (trade as any).key_id
+      if (keyId) m.incInflightByKey(String(keyId))
+    } catch (e) {
+      // best-effort
+    }
+    return
   }
 
   /** Return a snapshot array of all trades (shallow copy to prevent external mutation). */
@@ -45,6 +56,7 @@ class PendingPool {
   public clear(): void {
     this.trades.length = 0
     this.seenHashes.clear()
+    try { MetricsTracker.getInstance().setQueueDepth(0) } catch (e) {}
   }
 
   /** Remove trades whose txHash (case-insensitive) is in the provided array. Returns number removed. */
@@ -58,6 +70,15 @@ class PendingPool {
     this.seenHashes = new Set(this.trades.map(t => t.txHash.toLowerCase()))
     const removed = before - this.trades.length
     console.info('[PendingPool] removed trades', { removed, remaining: this.trades.length })
+    // update queue depth and best-effort decrement inflight for removed hashes
+    try {
+      const m = MetricsTracker.getInstance()
+      m.setQueueDepth(this.trades.length)
+      for (const r of hashes) {
+        const found = this.trades.find(t => t.txHash.toLowerCase() === r.toLowerCase())
+        if (found && (found as any).key_id) m.decInflightByKey(String((found as any).key_id))
+      }
+    } catch (e) {}
     return removed
   }
 

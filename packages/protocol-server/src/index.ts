@@ -64,14 +64,25 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
   }
   metrics.incrementReceived()
 
+  // start screening stage timer
+  const screeningStart = Date.now()
+
   const id = `sub_${Date.now()}_${Math.floor(Math.random() * 100000)}`
   console.info('[submit-tx] received submission', { id, rawPreview: (result.raw || '').slice(0, 20) })
 
   ;(async () => {
     try {
-      const sim = TransactionSimulator.getInstance()
-      const simRes = await sim.analyze(result.raw)
+      let simRes: any
+      if (!TransactionSimulator) {
+        // Dev fallback: when simulator isn't available, treat as accepted with mock values
+        simRes = { decision: 'ACCEPT', txHash: `0xtest_${Date.now()}`, grossProfitWei: 0, gasCostWei: 0, netProfitWei: 0, deltas: null }
+      } else {
+        const sim = TransactionSimulator.getInstance()
+        simRes = await sim.analyze(result.raw)
+      }
       if (simRes.decision === 'ACCEPT') {
+        // observe screening -> simulation stage latency
+        metrics.observeStage('screening', Date.now() - screeningStart)
         // Add to pending pool
         try {
           const txHash = (simRes as any).txHash || 'unknown'
@@ -87,6 +98,8 @@ app.post('/submit-tx', (req: Request<Record<string, unknown>, Record<string, unk
               netProfitWei: (simRes as any).netProfitWei
             }
           }
+          // tag trade with key_id if provided so PendingPool metrics can use it
+          if ((trade as any).key_id == null && (body as any).key_id) (trade as any).key_id = (body as any).key_id
           pendingPool.addTrade(trade)
 
           // JSONL success log (full simulation accept shape)
@@ -259,17 +272,21 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   const idempotencyKey = req.header('Idempotency-Key')
 
   if (!apiKey || !timestamp || !signature) {
-    metrics.incrementRejected()
-    metrics.recordProcessingTime(Date.now() - started)
-    return res.status(400).json({ reason_code: 'MISSING_HEADERS', reason_detail: 'required authentication headers missing', retryable: false, suggested_backoff_ms: 0 })
+  // record and label reject
+  metrics.incReject('schema')
+  metrics.recordProcessingTime(Date.now() - started)
+  metrics.observeDecisionLatency(Date.now() - started)
+  return res.status(400).json({ reason_code: 'MISSING_HEADERS', reason_detail: 'required authentication headers missing', retryable: false, suggested_backoff_ms: 0 })
   }
 
   // body validation
   const result = validateSubmitIntent(req.body)
   if (!result.valid) {
-    metrics.incrementRejected()
-    metrics.recordProcessingTime(Date.now() - started)
-    return res.status(400).json({ reason_code: 'INVALID_BODY', reason_detail: result.error, retryable: false, suggested_backoff_ms: 0 })
+  // schema validation failure
+  metrics.incReject('schema')
+  metrics.recordProcessingTime(Date.now() - started)
+  metrics.observeDecisionLatency(Date.now() - started)
+  return res.status(400).json({ reason_code: 'INVALID_BODY', reason_detail: result.error, retryable: false, suggested_backoff_ms: 0 })
   }
 
   const body = result.value as any
@@ -282,18 +299,24 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   if (idempotencyKey) {
     const existingByKey = intentStore.getByIdempotencyKeyWithin(idempotencyKey, IDEMPOTENCY_WINDOW_MS)
     if (existingByKey) {
-      metrics.incrementReceived()
-      metrics.recordProcessingTime(Date.now() - started)
-      return res.status(200).json({ intent_id: existingByKey.intent_id, decision: 'accepted', reason_code: existingByKey.reason_code, request_hash: existingByKey.request_hash, status_url: `/v1/status/${existingByKey.intent_id}`, correlation_id: existingByKey.correlation_id })
+  // idempotency hit
+  metrics.incIdempotencyHit()
+  metrics.incrementReceived()
+  metrics.recordProcessingTime(Date.now() - started)
+  metrics.observeDecisionLatency(Date.now() - started)
+  return res.status(200).json({ intent_id: existingByKey.intent_id, decision: 'accepted', reason_code: existingByKey.reason_code, request_hash: existingByKey.request_hash, status_url: `/v1/status/${existingByKey.intent_id}`, correlation_id: existingByKey.correlation_id })
     }
   }
 
   // idempotency: if we've already seen this hash recently, return the same stored row
   const existing = intentStore.getByHashWithin(request_hash, IDEMPOTENCY_WINDOW_MS)
   if (existing) {
-    metrics.incrementReceived()
-    metrics.recordProcessingTime(Date.now() - started)
-    return res.status(200).json({ intent_id: existing.intent_id, decision: 'accepted', reason_code: existing.reason_code, request_hash: existing.request_hash, status_url: `/v1/status/${existing.intent_id}`, correlation_id: existing.correlation_id })
+  // idempotency hit by hash
+  metrics.incIdempotencyHit()
+  metrics.incrementReceived()
+  metrics.recordProcessingTime(Date.now() - started)
+  metrics.observeDecisionLatency(Date.now() - started)
+  return res.status(200).json({ intent_id: existing.intent_id, decision: 'accepted', reason_code: existing.reason_code, request_hash: existing.request_hash, status_url: `/v1/status/${existing.intent_id}`, correlation_id: existing.correlation_id })
   }
 
   // basic signature check: HMAC-SHA256 over apiKey.timestamp.body using a test secret from ENV (in prod this would be a lookup)
@@ -304,14 +327,16 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
     // enforce timestamp skew
     const tsNum = Number(timestamp)
     if (Number.isNaN(tsNum)) {
-      metrics.incrementRejected()
+      metrics.incReject('stale')
       metrics.recordProcessingTime(Date.now() - started)
+      metrics.observeDecisionLatency(Date.now() - started)
       return res.status(400).json({ reason_code: 'BAD_TIMESTAMP', reason_detail: 'timestamp invalid', retryable: false, suggested_backoff_ms: 0 })
     }
     const now = Date.now()
     if (Math.abs(now - tsNum) > 30_000) {
-      metrics.incrementRejected()
+      metrics.incReject('stale')
       metrics.recordProcessingTime(Date.now() - started)
+      metrics.observeDecisionLatency(Date.now() - started)
       return res.status(400).json({ reason_code: 'TIMESTAMP_SKEW', reason_detail: 'timestamp outside allowed skew', retryable: true, suggested_backoff_ms: 1000 })
     }
 
@@ -320,8 +345,9 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
     const payload = [apiKey, timestamp, bodySha].join(':')
     const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex')
     if (expected !== signature) {
-      metrics.incrementRejected()
+      metrics.incReject('denylist')
       metrics.recordProcessingTime(Date.now() - started)
+      metrics.observeDecisionLatency(Date.now() - started)
       return res.status(401).json({ reason_code: 'BAD_SIGNATURE', reason_detail: 'signature mismatch', retryable: false, suggested_backoff_ms: 0 })
     }
   }
@@ -342,9 +368,14 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   // record idempotency key mapping if provided
   if (idempotencyKey) intentStore.setIdempotencyKey(idempotencyKey, row)
 
+  // observe decision latency and per-stage ingest latency
+  const decisionMs = Date.now() - started
+  metrics.observeDecisionLatency(decisionMs)
+  metrics.observeStage('ingest', decisionMs)
+
   metrics.incrementReceived()
   metrics.incrementAccepted()
-  metrics.recordProcessingTime(Date.now() - started)
+  metrics.recordProcessingTime(decisionMs)
 
   // structured JSONL intake log
   void fileLogger.logSuccess({
