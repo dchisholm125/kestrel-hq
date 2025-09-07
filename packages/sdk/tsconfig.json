@@ -5,11 +5,15 @@
     "declaration": true,
     "composite": true,
     "baseUrl": ".",
+  "moduleResolution": "NodeNext",
+  "module": "NodeNext",
   "types": ["node", "jest"],
-    "paths": {
-      "@kestrel/dto": ["../dto/src/index.ts"]
-    }
+    "paths": {}
   },
   "include": ["src/**/*"],
+  "references": [
+    { "path": "../dto" },
+    { "path": "../math" }
+  ],
   "exclude": ["node_modules", "dist"]
 }

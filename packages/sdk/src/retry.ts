@@ -85,6 +85,35 @@ export async function logSubmitOutcome(opts: {
   }
 }
 
+/**
+ * SDK hooks exposing simulation results to bots.
+ * Why allow local sim: fast heuristics during strategy development; server sim remains authoritative in pipelines.
+ */
+export type LocalSimInputs = {
+  profit: bigint
+  gasCost: bigint
+  latencyMs: number
+  risk: number
+  outcomes: Array<{ p: number; v: number }>
+}
+
+export async function simulateLocally(inputs: LocalSimInputs) {
+  // Use math modules client-side; no I/O or persistence.
+  const { calcBundleFee, rebateSplit, combineScores, scoreByLatency, scoreByProfit, scoreByRisk, expectedValue, normalizeProbs } = await import('@kestrel/math')
+  const effectiveGasCost = inputs.gasCost < 0n ? 0n : inputs.gasCost
+  const bundleFee = calcBundleFee(inputs.profit, effectiveGasCost)
+  const split = rebateSplit(inputs.profit, bundleFee)
+  const score = combineScores([0.5, 0.3, 0.2], [
+    scoreByProfit(inputs.profit),
+    scoreByLatency(inputs.latencyMs),
+    scoreByRisk(inputs.risk),
+  ])
+  const probs = normalizeProbs(inputs.outcomes.map(o => o.p))
+  const ev = expectedValue(probs, inputs.outcomes.map(o => o.v))
+  try { console.info(`[sdk] local sim score=${score.toFixed(4)}`) } catch {}
+  return { effectiveGasCost, bundleFee, split, score, ev }
+}
+
 // Optional default audit writer factory: appends JSONL to ~/.kestrel/audit/client_submissions.jsonl
 // Non-fatal if FS is unavailable (browser) – returns undefined.
 export function getDefaultClientAuditWriter(): AuditWriter | undefined {

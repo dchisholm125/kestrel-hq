@@ -2,12 +2,13 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
+    "rootDir": "src",
     "declaration": true,
     "composite": true,
     "strict": true,
     "noImplicitAny": true,
     "useUnknownInCatchVariables": false
   },
-  "include": ["src/**/*", "test/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test/**/*"]
 }

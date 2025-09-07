@@ -3,12 +3,11 @@
   "compilerOptions": {
     "outDir": "dist",
     "declaration": true,
-    "composite": true,
-    "baseUrl": ".",
-    "paths": {
-      "@kestrel/dto": ["../dto/src/index.ts"]
-    }
+    "composite": true
   },
-  "include": ["src/**/*", "../dto/src/**/*.ts"],
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../dto" }
+  ],
   "exclude": ["node_modules", "dist"]
 }

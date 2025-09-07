@@ -39,3 +39,23 @@ pnpm --filter @kestrel/sdk test
 Optional client audit
 
 - logSubmitOutcome will write a JSONL line to ~/.kestrel/audit/client_submissions.jsonl if no auditWriter is provided and Node fs is available.
+
+Local simulation hook
+
+```ts
+import { simulateLocally } from '@kestrel/sdk'
+
+const sim = await simulateLocally({
+  profit: 1000n,
+  gasCost: 200n,
+  latencyMs: 50,
+  risk: 0.1,
+  outcomes: [{ p: 0.5, v: 2 }, { p: 0.5, v: 0 }],
+})
+console.log('sim score', sim.score, 'fee', String(sim.bundleFee))
+```
+
+Why local sim vs server sim?
+
+- Local sim: fast heuristics during development; helps bots prioritize decisions.
+- Server sim: authoritative and logged; used in pipelines and audits.

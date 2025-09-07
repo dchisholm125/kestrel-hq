@@ -6,3 +6,7 @@
 - feat: shouldRetry(code) and retryDelay(code, attempt) helpers with conservative defaults
 - feat: logSubmitOutcome with console one-liners and optional client-side JSONL audit
 - chore: Jest + ts-jest setup with moduleNameMapper to @kestrel/dto
+
+## 0.1.1
+
+- feat: SDK exposes simulation results in SubmitResult and adds simulateLocally() helper

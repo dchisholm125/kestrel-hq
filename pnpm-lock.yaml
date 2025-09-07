@@ -13,10 +13,10 @@ importers:
         version: 30.0.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.7.5)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.9.2))
+        version: 29.7.0(@types/node@20.19.13)(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2))
       ts-jest:
         specifier: ^29.4.1
-        version: 29.4.1(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@30.0.5)(babel-jest@29.7.0(@babel/core@7.28.4))(jest-util@30.0.5)(jest@29.7.0(@types/node@22.7.5)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.9.2)))(typescript@5.9.2)
+        version: 29.4.1(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@30.0.5)(babel-jest@29.7.0(@babel/core@7.28.4))(jest-util@30.0.5)(jest@29.7.0(@types/node@20.19.13)(ts-node@10.9.2(@types/node@20.19.13)(typescript@5.9.2)))(typescript@5.9.2)
       turbo:
         specifier: ^2.5.6
         version: 2.5.6
@@ -59,6 +59,21 @@ importers:
     devDependencies:
       typescript:
         specifier: ^5.2.2
+        version: 5.9.2
+
+  packages/math:
+    devDependencies:
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.14
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.7.5)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.9.2))
+      ts-jest:
+        specifier: ^29.2.5
+        version: 29.4.1(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@30.0.5)(babel-jest@29.7.0(@babel/core@7.28.4))(jest-util@30.0.5)(jest@29.7.0(@types/node@22.7.5)(ts-node@10.9.2(@types/node@22.7.5)(typescript@5.9.2)))(typescript@5.9.2)
+      typescript:
+        specifier: ^5.5.0
         version: 5.9.2
 
   packages/protocol-sdk:
@@ -163,6 +178,9 @@ importers:
       '@kestrel/dto':
         specifier: workspace:0.1.0
         version: link:../dto
+      '@kestrel/math':
+        specifier: workspace:0.1.0
+        version: link:../math
     devDependencies:
       '@types/jest':
         specifier: ^29.5.12

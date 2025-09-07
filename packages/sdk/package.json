@@ -10,7 +10,8 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "@kestrel/dto": "workspace:0.1.0"
+  "@kestrel/dto": "workspace:0.1.0",
+  "@kestrel/math": "workspace:0.1.0"
   },
   "devDependencies": {
   "@types/node": "^20.11.30",
