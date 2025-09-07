@@ -5,8 +5,9 @@
    On failure, intent is moved to REJECTED with appropriate reason.
 */
 
-import { advanceIntent } from '../fsm/transitionExecutor'
 import { IntentState, ReasonCategory } from '../../../dto/src/enums'
+import { reason } from '@kestrel/reasons'
+import { ReasonedRejection } from '@kestrel/reasons'
 
 type Ctx = {
   intent: any
@@ -22,67 +23,34 @@ export async function validateIntent(ctx: Ctx) {
   // schema validation already happens earlier; here we add semantics
   // chain id check
   if (ctx.cfg?.chainId && intent.payload?.target_chain && intent.payload.target_chain !== ctx.cfg.chainId) {
-    return advanceIntent({
-      intentId: intent.intent_id || intent.id,
-      to: IntentState.REJECTED,
-      corr_id,
-      request_hash,
-      reason: {
-        code: 'VALIDATION_CHAIN_MISMATCH',
-        category: ReasonCategory.VALIDATION,
-        http_status: 400,
-        message: 'target_chain mismatch',
-        context: { expected: ctx.cfg.chainId, got: intent.payload.target_chain },
-      },
-    })
+    throw new ReasonedRejection(
+      reason('VALIDATION_CHAIN_MISMATCH', { message: 'target_chain mismatch', context: { expected: ctx.cfg.chainId, got: intent.payload.target_chain } }),
+      'Rejecting at VALIDATE: target_chain mismatch'
+    )
   }
 
   // signature check: expect intent.payload.signature + signing key
   if (intent.payload?.signature) {
     // For now assume a provided verifier on ctx; if missing, mark signature fail
     if (!ctx.verifySignature || typeof ctx.verifySignature !== 'function') {
-      return advanceIntent({
-        intentId: intent.intent_id || intent.id,
-        to: IntentState.REJECTED,
-        corr_id,
-        request_hash,
-        reason: {
-          code: 'VALIDATION_SIGNATURE_FAIL',
-          category: ReasonCategory.VALIDATION,
-          http_status: 400,
-          message: 'signature verifier unavailable',
-        },
-      })
+      throw new ReasonedRejection(
+        reason('VALIDATION_SIGNATURE_FAIL', { http_status: 400, message: 'signature verifier unavailable' }),
+        'Rejecting at VALIDATE: verifier unavailable'
+      )
     }
     try {
       const ok = await ctx.verifySignature(intent.payload)
       if (!ok) {
-        return advanceIntent({
-          intentId: intent.intent_id || intent.id,
-          to: IntentState.REJECTED,
-          corr_id,
-          request_hash,
-          reason: {
-            code: 'VALIDATION_SIGNATURE_FAIL',
-            category: ReasonCategory.VALIDATION,
-            http_status: 400,
-            message: 'signature verification failed',
-          },
-        })
+        throw new ReasonedRejection(
+          reason('VALIDATION_SIGNATURE_FAIL', { http_status: 400, message: 'signature verification failed' }),
+          'Rejecting at VALIDATE: signature check failed'
+        )
       }
     } catch (e) {
-      return advanceIntent({
-        intentId: intent.intent_id || intent.id,
-        to: IntentState.REJECTED,
-        corr_id,
-        request_hash,
-        reason: {
-          code: 'INTERNAL_ERROR',
-          category: ReasonCategory.VALIDATION,
-          http_status: 500,
-          message: 'signature verifier failure',
-        },
-      })
+      throw new ReasonedRejection(
+        reason('INTERNAL_ERROR', { message: 'signature verifier failure' }),
+        'Rejecting at VALIDATE: verifier failure'
+      )
     }
   }
 
@@ -90,23 +58,14 @@ export async function validateIntent(ctx: Ctx) {
   if (intent.payload?.gas_limit != null && ctx.cfg?.limits?.maxGas != null) {
     const g = Number(intent.payload.gas_limit)
     if (isNaN(g) || g <= 0 || g > ctx.cfg.limits.maxGas) {
-      return advanceIntent({
-        intentId: intent.intent_id || intent.id,
-        to: IntentState.REJECTED,
-        corr_id,
-        request_hash,
-        reason: {
-          code: 'VALIDATION_GAS_BOUNDS',
-          category: ReasonCategory.VALIDATION,
-          http_status: 400,
-          message: 'gas limit out of bounds',
-          context: { maxGas: ctx.cfg.limits.maxGas, got: g },
-        },
-      })
+      throw new ReasonedRejection(
+        reason('VALIDATION_GAS_BOUNDS', { message: 'gas limit out of bounds', context: { maxGas: ctx.cfg.limits.maxGas, got: g } }),
+        'Rejecting at VALIDATE: gas limit out of bounds'
+      )
     }
   }
 
-  return advanceIntent({ intentId: intent.intent_id || intent.id, to: IntentState.VALIDATED, corr_id, request_hash })
+  return { next: IntentState.VALIDATED }
 }
 
 export default validateIntent

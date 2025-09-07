@@ -30,6 +30,9 @@ import { screenIntent } from './stages/screen'
 import { validateIntent } from './stages/validate'
 import { enrichIntent } from './stages/enrich'
 import { policyIntent } from './stages/policy'
+import { ReasonedRejection } from '@kestrel/reasons'
+import { appendRejection } from './utils/rejectionAudit'
+import { advanceIntent } from './fsm/transitionExecutor'
 
 // prefer the modular HTTP router when available
 let app: Express
@@ -477,7 +480,15 @@ app.post('/intent', async (req: Request, res: Response) => {
 
   try {
     // run stages synchronously; on any REJECTED, return error envelope
-    await screenIntent(ctxBase)
+    try {
+      const r = await screenIntent(ctxBase)
+  if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+    } catch (e) {
+      if (e instanceof ReasonedRejection) {
+  await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+        await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'screen', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
+      } else { throw e }
+    }
     let updated = intentStore.getById(intent_id)
     if (!updated) throw new Error('intent not found after screen')
     if (updated.state === IntentState.REJECTED) {
@@ -486,7 +497,15 @@ app.post('/intent', async (req: Request, res: Response) => {
       return res.status(reason.http_status).json(envelope)
     }
 
-    await validateIntent(ctxBase)
+    try {
+      const r = await validateIntent(ctxBase)
+  if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+    } catch (e) {
+      if (e instanceof ReasonedRejection) {
+  await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+        await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'validate', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
+      } else { throw e }
+    }
     updated = intentStore.getById(intent_id)
     if (updated?.state === IntentState.REJECTED) {
       const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
@@ -494,7 +513,15 @@ app.post('/intent', async (req: Request, res: Response) => {
       return res.status(reason.http_status).json(envelope)
     }
 
-    await enrichIntent(ctxBase)
+    try {
+      const r = await enrichIntent(ctxBase)
+  if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+    } catch (e) {
+      if (e instanceof ReasonedRejection) {
+  await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+        await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'enrich', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
+      } else { throw e }
+    }
     updated = intentStore.getById(intent_id)
     if (updated?.state === IntentState.REJECTED) {
       const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
@@ -502,7 +529,15 @@ app.post('/intent', async (req: Request, res: Response) => {
       return res.status(reason.http_status).json(envelope)
     }
 
-    await policyIntent(ctxBase)
+    try {
+      const r = await policyIntent(ctxBase)
+  if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+    } catch (e) {
+      if (e instanceof ReasonedRejection) {
+  await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+        await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'policy', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
+      } else { throw e }
+    }
     updated = intentStore.getById(intent_id)
     if (updated?.state === IntentState.REJECTED) {
       const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')

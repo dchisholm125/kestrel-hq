@@ -10,5 +10,19 @@
     "semi": ["error", "never"],
     "quotes": ["error", "single"],
     "@typescript-eslint/no-unused-vars": ["warn"]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/stages/**/*.ts"],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "ThrowStatement > NewExpression[callee.name='Error']",
+            "message": "Use ReasonedRejection in stages instead of new Error()"
+          }
+        ]
+      }
+    }
+  ]
 }

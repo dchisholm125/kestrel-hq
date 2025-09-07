@@ -11,8 +11,9 @@
    On success, intent is moved to SCREENED.
 */
 
-import { advanceIntent } from '../fsm/transitionExecutor'
 import { IntentState, ReasonCategory } from '../../../dto/src/enums'
+import { reason } from '@kestrel/reasons'
+import { ReasonedRejection } from '@kestrel/reasons'
 
 type Ctx = {
   intent: any
@@ -27,36 +28,19 @@ export async function screenIntent(ctx: Ctx) {
 
   // size check
   if (intent.bytes != null && ctx.cfg?.limits?.maxBytes && intent.bytes > ctx.cfg.limits.maxBytes) {
-    return advanceIntent({
-      intentId: intent.intent_id || intent.id,
-      to: IntentState.REJECTED,
-      corr_id,
-      request_hash,
-      reason: {
-        code: 'SCREEN_TOO_LARGE',
-        category: ReasonCategory.SCREEN,
-        http_status: 413,
-        message: 'payload exceeds maxBytes',
-        context: { maxBytes: ctx.cfg.limits.maxBytes, got: intent.bytes },
-      },
-    })
+    throw new ReasonedRejection(
+      reason('SCREEN_TOO_LARGE', { message: 'payload exceeds maxBytes', context: { maxBytes: ctx.cfg.limits.maxBytes, got: intent.bytes } }),
+    'Rejecting at SCREEN: payload exceeds maxBytes'
+    )
   }
 
   // replay check (cache-backed)
   if (request_hash && ctx.cache && typeof ctx.cache.seen === 'function') {
     if (await ctx.cache.seen(request_hash)) {
-      return advanceIntent({
-        intentId: intent.intent_id || intent.id,
-        to: IntentState.REJECTED,
-        corr_id,
-        request_hash,
-        reason: {
-          code: 'SCREEN_REPLAY_SEEN',
-          category: ReasonCategory.SCREEN,
-          http_status: 409,
-          message: 'duplicate request_hash with differing body',
-        },
-      })
+      throw new ReasonedRejection(
+        reason('SCREEN_REPLAY_SEEN', { http_status: 409, message: 'duplicate request_hash with differing body' }),
+        'Rejecting at SCREEN: replay seen'
+      )
     }
   }
 
@@ -65,19 +49,10 @@ export async function screenIntent(ctx: Ctx) {
   if (deadline != null && ctx.cfg?.limits?.minDeadlineMs != null) {
     const now = Date.now()
     if (deadline < now) {
-      return advanceIntent({
-        intentId: intent.intent_id || intent.id,
-        to: IntentState.REJECTED,
-        corr_id,
-        request_hash,
-        reason: {
-          code: 'CLIENT_EXPIRED',
-          category: ReasonCategory.SCREEN,
-          http_status: 400,
-          message: 'deadline already passed',
-          context: { now, deadline },
-        },
-      })
+      throw new ReasonedRejection(
+        reason('CLIENT_EXPIRED', { message: 'deadline already passed', context: { now, deadline } }),
+        'Rejecting at SCREEN: deadline passed'
+      )
     }
   }
 
@@ -86,38 +61,22 @@ export async function screenIntent(ctx: Ctx) {
     try {
       const limited = await (ctx as any).rateLimiter.check(intent)
       if (limited) {
-        return advanceIntent({
-          intentId: intent.intent_id || intent.id,
-          to: IntentState.REJECTED,
-          corr_id,
-          request_hash,
-          reason: {
-            code: 'SCREEN_RATE_LIMIT',
-            category: ReasonCategory.SCREEN,
-            http_status: 429,
-            message: 'rate limit exceeded',
-          },
-        })
+        throw new ReasonedRejection(
+          reason('SCREEN_RATE_LIMIT', { message: 'rate limit exceeded' }),
+          'Rejecting at SCREEN: rate limit exceeded'
+        )
       }
     } catch (e) {
       // if rate limiter fails, fail-fast to REJECTED
-      return advanceIntent({
-        intentId: intent.intent_id || intent.id,
-        to: IntentState.REJECTED,
-        corr_id,
-        request_hash,
-        reason: {
-          code: 'INTERNAL_ERROR',
-          category: ReasonCategory.SCREEN,
-          http_status: 500,
-          message: 'rate limiter failure',
-        },
-      })
+      throw new ReasonedRejection(
+        reason('INTERNAL_ERROR', { message: 'rate limiter failure' }),
+        'Rejecting at SCREEN: rate limiter failure'
+      )
     }
   }
 
   // passed screening
-  return advanceIntent({ intentId: intent.intent_id || intent.id, to: IntentState.SCREENED, corr_id, request_hash })
+  return { next: IntentState.SCREENED }
 }
 
 export default screenIntent

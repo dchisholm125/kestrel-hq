@@ -1,3 +1,7 @@
+## Reasons & Deterministic Rejections
+
+This repo now includes `@kestrel/reasons`, a centralized registry and error type. Stages throw `ReasonedRejection(reason('CODE', { context }))`. The HTTP/pipeline catches, advances the FSM to REJECTED, and writes a JSONL audit record to `packages/protocol-server/logs/rejections.jsonl`.
+
 # Kestrel HQ (monorepo)
 
 This repository is a small monorepo containing reference server, SDK, API spec, and example packages for the Kestrel protocol.

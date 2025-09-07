@@ -13,13 +13,16 @@ import MetricsTracker from '../services/MetricsTracker'
 import { intentStore } from '../services/IntentStore'
 import { ulid } from 'ulid'
 import { getReason } from '../../../dto/src/reasons'
+import { ReasonedRejection } from '@kestrel/reasons'
+import { appendRejection } from '../utils/rejectionAudit'
+import { advanceIntent } from '../fsm/transitionExecutor'
 import { IntentState, ErrorEnvelope } from '../../../dto/src/enums'
 
 export async function postIntent(req: Request, res: Response) {
   // lazy-load metrics tracker so tests can override the module at runtime
   const metrics = require('../services/MetricsTracker').default.getInstance()
   const start = Date.now()
-  const corr_id = req.corr_id || `corr_${ulid()}`
+  const corr_id = (req as any).corr_id || `corr_${ulid()}`
   const body = req.body || {}
 
   // minimal schema: intent_id required
@@ -59,7 +62,17 @@ export async function postIntent(req: Request, res: Response) {
   const sStart = Date.now()
   // lazy-require stages to avoid pulling heavy DB deps during module import
   const { screenIntent } = require('../stages/screen')
-  await screenIntent(ctx)
+  try {
+    const r = await screenIntent(ctx)
+    if (r?.next) {
+      await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+    }
+  } catch (e) {
+    if (e instanceof ReasonedRejection) {
+      await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+      await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'screen', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
+    } else { throw e }
+  }
   try { console.debug('[postIntent] observeStage screen about to call') } catch (e) {}
   metrics.observeStage('screen', Date.now() - sStart)
     let updated = intentStore.getById(intent_id)
@@ -71,7 +84,15 @@ export async function postIntent(req: Request, res: Response) {
 
   const vStart = Date.now()
   const { validateIntent } = require('../stages/validate')
-  await validateIntent(ctx)
+  try {
+    const r = await validateIntent(ctx)
+    if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+  } catch (e) {
+    if (e instanceof ReasonedRejection) {
+      await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+      await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'validate', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
+    } else { throw e }
+  }
   try { console.debug('[postIntent] observeStage validate about to call') } catch (e) {}
   metrics.observeStage('validate', Date.now() - vStart)
     updated = intentStore.getById(intent_id)
@@ -83,7 +104,15 @@ export async function postIntent(req: Request, res: Response) {
 
   const eStart = Date.now()
   const { enrichIntent } = require('../stages/enrich')
-  await enrichIntent(ctx)
+  try {
+    const r = await enrichIntent(ctx)
+    if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+  } catch (e) {
+    if (e instanceof ReasonedRejection) {
+      await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+      await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'enrich', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
+    } else { throw e }
+  }
   try { console.debug('[postIntent] observeStage enrich about to call') } catch (e) {}
   metrics.observeStage('enrich', Date.now() - eStart)
     updated = intentStore.getById(intent_id)
@@ -95,7 +124,15 @@ export async function postIntent(req: Request, res: Response) {
 
   const pStart = Date.now()
   const { policyIntent } = require('../stages/policy')
-  await policyIntent(ctx)
+  try {
+    const r = await policyIntent(ctx)
+    if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+  } catch (e) {
+    if (e instanceof ReasonedRejection) {
+      await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+      await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'policy', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
+    } else { throw e }
+  }
   try { console.debug('[postIntent] observeStage policy about to call') } catch (e) {}
   metrics.observeStage('policy', Date.now() - pStart)
     updated = intentStore.getById(intent_id)

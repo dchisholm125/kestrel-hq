@@ -10,7 +10,13 @@
     "declaration": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-  "types": ["node", "mocha", "jest"]
+  "types": ["node", "mocha", "jest"],
+  "baseUrl": ".",
+  "paths": {
+  "@kestrel/reasons": ["../reasons/src/index.ts"],
+  "@kestrel/reasons/*": ["../reasons/src/*"],
+    "@kestrel/dto": ["../dto/src/index.ts"]
+  }
   },
   "include": [
     "src/index.ts",

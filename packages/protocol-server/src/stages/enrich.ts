@@ -4,7 +4,6 @@
    On success, intent is moved to ENRICHED state.
 */
 
-import { advanceIntent } from '../fsm/transitionExecutor'
 import { IntentState } from '../../../dto/src/enums'
 
 type Ctx = {
@@ -32,7 +31,7 @@ export async function enrichIntent(ctx: Ctx) {
     }
   }
 
-  return advanceIntent({ intentId: intent.intent_id || intent.id, to: IntentState.ENRICHED, corr_id, request_hash })
+  return { next: IntentState.ENRICHED }
 }
 
 export default enrichIntent

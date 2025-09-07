@@ -5,8 +5,9 @@
    On failure, intent is moved to REJECTED with appropriate reason.
 */
 
-import { advanceIntent } from '../fsm/transitionExecutor'
 import { IntentState, ReasonCategory } from '../../../dto/src/enums'
+import { reason } from '@kestrel/reasons'
+import { ReasonedRejection } from '@kestrel/reasons'
 
 type Ctx = {
   intent: any
@@ -23,18 +24,10 @@ export async function policyIntent(ctx: Ctx) {
   if (ctx.cfg?.policy?.allowedAccounts && Array.isArray(ctx.cfg.policy.allowedAccounts)) {
     const acct = intent.payload?.from
     if (acct && !ctx.cfg.policy.allowedAccounts.includes(acct)) {
-      return advanceIntent({
-        intentId: intent.intent_id || intent.id,
-        to: IntentState.REJECTED,
-        corr_id,
-        request_hash,
-        reason: {
-          code: 'POLICY_ACCOUNT_NOT_ALLOWED',
-          category: ReasonCategory.POLICY,
-          http_status: 403,
-          message: 'account not permitted',
-        },
-      })
+      throw new ReasonedRejection(
+        reason('POLICY_ACCOUNT_NOT_ALLOWED', { message: 'account not permitted' }),
+        'Rejecting at POLICY: account not allowed'
+      )
     }
   }
 
@@ -42,54 +35,30 @@ export async function policyIntent(ctx: Ctx) {
   if (ctx.queue && typeof ctx.queue.enqueue === 'function') {
     const capacity = ctx.queue.capacity ?? ctx.cfg?.queueCapacity ?? 100
     if (capacity <= 0) {
-      return advanceIntent({
-        intentId: intent.intent_id || intent.id,
-        to: IntentState.REJECTED,
-        corr_id,
-        request_hash,
-        reason: {
-          code: 'QUEUE_CAPACITY',
-          category: ReasonCategory.QUEUE,
-          http_status: 503,
-          message: 'queue full',
-        },
-      })
+      throw new ReasonedRejection(
+        reason('QUEUE_CAPACITY', { message: 'queue full' }),
+        'Rejecting at QUEUE: capacity full'
+      )
     }
 
     // attempt to enqueue (if returns false, treat as backpressure)
     try {
       const ok = await ctx.queue.enqueue(intent)
       if (!ok) {
-        return advanceIntent({
-          intentId: intent.intent_id || intent.id,
-          to: IntentState.REJECTED,
-          corr_id,
-          request_hash,
-          reason: {
-            code: 'QUEUE_CAPACITY',
-            category: ReasonCategory.QUEUE,
-            http_status: 503,
-            message: 'queue backpressure',
-          },
-        })
+        throw new ReasonedRejection(
+          reason('QUEUE_CAPACITY', { message: 'queue backpressure' }),
+          'Rejecting at QUEUE: backpressure'
+        )
       }
     } catch (e) {
-      return advanceIntent({
-        intentId: intent.intent_id || intent.id,
-        to: IntentState.REJECTED,
-        corr_id,
-        request_hash,
-        reason: {
-          code: 'INTERNAL_ERROR',
-          category: ReasonCategory.QUEUE,
-          http_status: 500,
-          message: 'queue enqueue failed',
-        },
-      })
+      throw new ReasonedRejection(
+        reason('INTERNAL_ERROR', { message: 'queue enqueue failed' }),
+        'Rejecting at QUEUE: enqueue failed'
+      )
     }
   }
 
-  return advanceIntent({ intentId: intent.intent_id || intent.id, to: IntentState.QUEUED, corr_id, request_hash })
+  return { next: IntentState.QUEUED }
 }
 
 export default policyIntent
