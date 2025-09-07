@@ -3,9 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test": "node test/sdk-to-server.test.js"
-  }
-  ,"devDependencies": {
-    "node-fetch": "^2.6.12"
+    "test": "jest --runInBand"
+  },
+  "devDependencies": {
+    "node-fetch": "^2.6.12",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.1",
+    "@types/jest": "^29.0.0",
+    "supertest": "^6.3.4",
+  "@types/supertest": "^6.0.0",
+    "pg": "^8.11.0"
   }
 }
