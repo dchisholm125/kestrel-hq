@@ -16,6 +16,8 @@ try {
   pendingPool = null
 }
 import FileLogger from './utils/fileLogger'
+import { IntentState } from '../../dto/src/enums'
+import { intentFSM } from './services/IntentFSM.js'
 const fileLogger = FileLogger.getInstance()
 import MetricsTracker from './services/MetricsTracker.js'
 import { ulid } from 'ulid'
@@ -359,7 +361,7 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
     intent_id,
     request_hash,
     correlation_id,
-    state: 'RECEIVED',
+  state: IntentState.RECEIVED,
     reason_code: 'ok',
     received_at: Date.now(),
     payload: body,

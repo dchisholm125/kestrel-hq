@@ -1,5 +1,5 @@
 {
-  "name": "@kestrel/protocol-sdk",
+  "name": "@kestrel/dto",
   "version": "0.1.0",
   "private": true,
   "main": "dist/index.js",
@@ -10,13 +10,7 @@
     "clean": "rm -rf dist",
     "prepare": "npm run build"
   },
-  "dependencies": {
-  "node-fetch": "^2.6.12",
-  "@kestrel/dto": "workspace:0.1.0"
-  },
   "devDependencies": {
-    "typescript": "^5.2.2",
-    "@types/node": "^20.3.1",
-    "@types/node-fetch": "^2.6.2"
+    "typescript": "^5.2.2"
   }
 }

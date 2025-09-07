@@ -5,12 +5,13 @@
    In a real-world application, this would be backed by a persistent database. */
 
 import crypto from 'crypto'
+import { IntentState } from '../../dto/src/enums'
 
 export type IntentRow = {
   intent_id: string
   request_hash: string
   correlation_id: string
-  state: 'RECEIVED' | string
+  state: IntentState | string
   reason_code: string
   received_at: number
   payload: any

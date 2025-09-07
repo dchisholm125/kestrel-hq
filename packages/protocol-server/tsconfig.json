@@ -5,7 +5,7 @@
     "target": "ES2022",
     "lib": ["ES2022"],
     "outDir": "./dist",
-    "rootDir": ".",
+  "rootDir": "..",
     "composite": true,
     "strict": true,
     "declaration": true,
@@ -19,7 +19,9 @@
     "src/config.ts",
     "src/validators/**/*.ts",
     "src/services/IntentStore.ts",
+  "src/services/IntentFSM.ts",
     "src/services/MetricsTracker.ts",
-    "src/utils/**/*.ts"
+  "src/utils/**/*.ts",
+  "../dto/src/**/*.ts"
   ]
 }

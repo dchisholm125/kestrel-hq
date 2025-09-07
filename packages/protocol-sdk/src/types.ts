@@ -22,19 +22,11 @@ export type SubmitResp = {
   correlation_id: string;
 };
 
+import { IntentState } from '../../dto/src/enums'
+
 export type StatusResp = {
   intent_id: string;
-  state:
-    | 'RECEIVED'
-    | 'SCREENED'
-    | 'SNAPSHOT'
-    | 'FAST_SIM'
-    | 'SELECTED'
-    | 'BUNDLING'
-    | 'SUBMITTED'
-    | 'INCLUDED'
-    | 'DROPPED'
-    | 'REJECTED';
+  state: IntentState | string;
   reason_code: string;
   sim_summary?: {
     gross_profit_wei?: string;
