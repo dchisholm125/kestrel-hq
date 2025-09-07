@@ -3,11 +3,19 @@
     "target": "ES2019",
     "module": "CommonJS",
     "declaration": true,
-    "outDir": "dist",
+  "outDir": "dist",
+  "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+  "forceConsistentCasingInFileNames": true,
+    "composite": true,
+    "paths": {
+      "@kestrel-hq/dto": ["../dto/dist/index.d.ts"]
+    }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [
+    { "path": "../dto" }
+  ]
 }

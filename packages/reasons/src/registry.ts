@@ -3,7 +3,7 @@
  * Centralizes all machine-parsable rejection codes for Kestrel.
  * Each entry is stable and consumed by bots/dashboards to interpret failures deterministically.
  */
-import { ReasonCode, ReasonCategory, ReasonDetail } from '@kestrel/dto'
+import { ReasonCode, ReasonCategory, ReasonDetail } from '@kestrel-hq/dto'
 
 import { REASONS as DTO_REASONS } from '../../dto/src/reasons'
 

@@ -4,7 +4,7 @@
  * Defaults come from REASONS; overrides can change `message`, `http_status`, and add `context`.
  * Adding new codes: extend REASONS in registry.ts. Keep codes stable once published to avoid breaking bots.
  */
-import { ReasonDetail, ReasonCode } from '@kestrel/dto'
+import { ReasonDetail, ReasonCode } from '@kestrel-hq/dto'
 import { REASONS } from './registry'
 
 export type ReasonOverrides = Partial<Pick<ReasonDetail, 'message' | 'http_status' | 'context'>>

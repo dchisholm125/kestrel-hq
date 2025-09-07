@@ -1,4 +1,9 @@
-# @kestrel/reasons
+# @kestrel-hq/reasons
+
+Centralized Reasons Registry and ReasonedRejection error types.
+
+- Depends on `@kestrel-hq/dto`.
+- Exports via `src/index.ts` barrel.# @kestrel/reasons
 
 Centralized Reasons Registry and ReasonedRejection error for deterministic, machine-parsable failures across Kestrel stages.
 

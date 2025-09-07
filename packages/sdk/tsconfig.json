@@ -2,13 +2,17 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
+  "rootDir": "src",
     "declaration": true,
     "composite": true,
     "baseUrl": ".",
-  "moduleResolution": "NodeNext",
-  "module": "NodeNext",
+  "moduleResolution": "Node16",
+  "module": "Node16",
   "types": ["node", "jest"],
-    "paths": {}
+    "paths": {
+      "@kestrel-hq/dto": ["../dto/src/index.ts"],
+      "@kestrel-hq/math": ["../math/src/index.ts"]
+    }
   },
   "include": ["src/**/*"],
   "references": [

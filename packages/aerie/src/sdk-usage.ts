@@ -1,4 +1,4 @@
-import { ProtocolSDK } from '@kestrel/protocol-sdk';
+import { ProtocolSDK } from '@kestrel-hq/protocol-sdk';
 
 // Example wrapper showing Aerie must use the SDK for submissions.
 export function createSubmitter() {

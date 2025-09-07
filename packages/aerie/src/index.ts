@@ -1,3 +1,7 @@
+/**
+ * Kestrel Aerie SDK public surface.
+ * Scanner and trading helpers for on-chain opportunities.
+ */
 export { OnChainScanner } from './OnChainScanner';
 export { OpportunityIdentifier, type Opportunity } from './OpportunityIdentifier';
 export { TradeCrafter } from './TradeCrafter';

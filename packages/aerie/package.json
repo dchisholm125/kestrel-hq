@@ -1,17 +1,29 @@
 {
-  "name": "@dchisholm125/kestrel-aerie",
-  "version": "0.1.3",
+  "name": "@kestrel-hq/aerie",
+  "version": "0.2.0",
   "description": "Kestrel Aerie SDK - OnChainScanner module",
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -b",
+    "postbuild": "node ../../tools/build/dualize.js",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "pnpm run build && pnpm test --if-present",
     "test": "jest --passWithNoTests",
     "test:unit": "jest --testPathPattern=__tests__/unit --runInBand",
     "test:integration": "RUN_INTEGRATION=true jest --testPathPattern=__tests__/integration --runInBand --detectOpenHandles",
-    "smoke": "node /home/ubuntu/kestrel-hq/packages/aerie/src/scripts/aerie-smoke.js"
+    "smoke": "node ./src/scripts/aerie-smoke.js"
   },
   "keywords": ["ethers", "ethereum", "scanner", "blocks", "pending-transactions"],
   "author": "",
@@ -19,9 +31,14 @@
   "dependencies": {
     "ethers": "^6.13.1",
     "axios": "^1.6.8",
-  "ws": "^8.18.0",
-  "@kestrel/protocol-sdk": "file:../protocol-sdk"
+    "ws": "^8.18.0",
+  "@kestrel-hq/protocol-sdk": "^0.2.0"
   },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://<your-private-registry>"
+  },
+  "packageManager": "pnpm@10.15.1",
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^20.11.30",

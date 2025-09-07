@@ -1,0 +1,23 @@
+{
+  "name": "tmp-consumer",
+  "private": true,
+  "version": "0.0.0",
+  "pnpm": {
+    "overrides": {
+      "@kestrel-hq/aerie": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-aerie-0.2.0.tgz",
+      "@kestrel-hq/dto": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-dto-0.2.0.tgz",
+      "@kestrel-hq/math": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-math-0.2.0.tgz",
+      "@kestrel-hq/protocol-sdk": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-protocol-sdk-0.2.0.tgz",
+      "@kestrel-hq/reasons": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-reasons-0.2.0.tgz",
+      "@kestrel-hq/sdk": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-sdk-0.2.0.tgz"
+    }
+  },
+  "dependencies": {
+    "@kestrel-hq/aerie": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-aerie-0.2.0.tgz",
+    "@kestrel-hq/dto": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-dto-0.2.0.tgz",
+    "@kestrel-hq/math": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-math-0.2.0.tgz",
+    "@kestrel-hq/protocol-sdk": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-protocol-sdk-0.2.0.tgz",
+    "@kestrel-hq/reasons": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-reasons-0.2.0.tgz",
+    "@kestrel-hq/sdk": "file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-sdk-0.2.0.tgz"
+  }
+}

@@ -3,7 +3,7 @@
  * Encodes a conservative, deterministic retry policy that bot clients can adopt by default.
  * Stability: The policy aims to be stable across versions; deploy-specific overrides can be layered on top.
  */
-import type { ReasonCode } from '@kestrel/dto'
+import type { ReasonCode } from '@kestrel-hq/dto'
 
 /**
  * shouldRetry
@@ -99,7 +99,7 @@ export type LocalSimInputs = {
 
 export async function simulateLocally(inputs: LocalSimInputs) {
   // Use math modules client-side; no I/O or persistence.
-  const { calcBundleFee, rebateSplit, combineScores, scoreByLatency, scoreByProfit, scoreByRisk, expectedValue, normalizeProbs } = await import('@kestrel/math')
+  const { calcBundleFee, rebateSplit, combineScores, scoreByLatency, scoreByProfit, scoreByRisk, expectedValue, normalizeProbs } = await import('@kestrel-hq/math')
   const effectiveGasCost = inputs.gasCost < 0n ? 0n : inputs.gasCost
   const bundleFee = calcBundleFee(inputs.profit, effectiveGasCost)
   const split = rebateSplit(inputs.profit, bundleFee)

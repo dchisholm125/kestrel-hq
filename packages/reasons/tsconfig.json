@@ -4,12 +4,16 @@
     "outDir": "dist",
     "rootDir": "src",
     "declaration": true,
-    "composite": true
+  "composite": true,
+  "baseUrl": ".",
+    "paths": {
+      "@kestrel-hq/dto": ["../dto/src/index.ts"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test/**/*"],
   "references": [
-    { "path": "../dto" }
+  { "path": "../dto" }
   ],
   
 }

@@ -4,6 +4,20 @@
     "module": "CommonJS",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@kestrel-hq/dto": ["packages/dto/src/index.ts"],
+      "@kestrel-hq/math": ["packages/math/src/index.ts"],
+      "@kestrel-hq/reasons": ["packages/reasons/src/index.ts"],
+      "@kestrel-hq/sdk": ["packages/sdk/src/index.ts"],
+      "@kestrel-hq/protocol-sdk": ["packages/protocol-sdk/src/index.ts"],
+  "@kestrel-hq/aerie": ["packages/aerie/src/index.ts"],
+  "@kestrel/dto": ["packages/dto/src/index.ts"],
+  "@kestrel/math": ["packages/math/src/index.ts"],
+  "@kestrel/reasons": ["packages/reasons/src/index.ts"],
+  "@kestrel/sdk": ["packages/sdk/src/index.ts"],
+  "@kestrel/protocol-sdk": ["packages/protocol-sdk/src/index.ts"]
+    }
   }
 }

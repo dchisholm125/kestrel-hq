@@ -1,4 +1,9 @@
-# @kestrel/sdk
+# @kestrel-hq/sdk
+
+Helpers for client submit flows: retry policy, typing, and logging.
+
+- Depends on `@kestrel-hq/dto` and `@kestrel-hq/math`.
+- Exports via barrel `src/index.ts`.# @kestrel/sdk
 
 Lightweight helpers for bot clients: typed SubmitResult union and retry policy.
 

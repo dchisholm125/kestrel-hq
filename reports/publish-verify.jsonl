@@ -1,0 +1,36 @@
+{"ts":"2025-09-07T13:58:27.585Z","package":"@kestrel-hq/aerie","version":"0.2.0","built":true,"packed":false,"sandboxInstalled":false}
+{"ts":"2025-09-07T13:58:27.587Z","package":"@kestrel-hq/dto","version":"0.2.0","built":true,"packed":false,"sandboxInstalled":false}
+{"ts":"2025-09-07T13:58:27.587Z","package":"@kestrel-hq/math","version":"0.2.0","built":true,"packed":false,"sandboxInstalled":false}
+{"ts":"2025-09-07T13:58:27.587Z","package":"@kestrel-hq/protocol-sdk","version":"0.2.0","built":true,"packed":false,"sandboxInstalled":false}
+{"ts":"2025-09-07T13:58:27.587Z","package":"@kestrel-hq/reasons","version":"0.2.0","built":true,"packed":false,"sandboxInstalled":false}
+{"ts":"2025-09-07T13:58:27.587Z","package":"@kestrel-hq/sdk","version":"0.2.0","built":true,"packed":false,"sandboxInstalled":false}
+{"ts":"2025-09-07T14:01:01.345Z","package":"@kestrel-hq/aerie","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"error":"Error: Command failed: pnpm add \"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-aerie-0.2.0.tgz\""}
+{"ts":"2025-09-07T14:01:02.189Z","package":"@kestrel-hq/dto","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-dto-0.2.0.tgz"}
+{"ts":"2025-09-07T14:01:03.084Z","package":"@kestrel-hq/math","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-math-0.2.0.tgz"}
+{"ts":"2025-09-07T14:01:04.433Z","package":"@kestrel-hq/protocol-sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"error":"Error: Command failed: pnpm add \"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-protocol-sdk-0.2.0.tgz\""}
+{"ts":"2025-09-07T14:01:05.332Z","package":"@kestrel-hq/reasons","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"error":"Error: Command failed: pnpm add \"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-reasons-0.2.0.tgz\""}
+{"ts":"2025-09-07T14:01:06.134Z","package":"@kestrel-hq/sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"error":"Error: Command failed: pnpm add \"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-sdk-0.2.0.tgz\""}
+{"ts":"2025-09-07T14:03:28.543Z","package":"@kestrel-hq/aerie","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-aerie-0.2.0.tgz"}
+{"ts":"2025-09-07T14:03:28.544Z","package":"@kestrel-hq/dto","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-dto-0.2.0.tgz"}
+{"ts":"2025-09-07T14:03:28.544Z","package":"@kestrel-hq/math","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-math-0.2.0.tgz"}
+{"ts":"2025-09-07T14:03:28.544Z","package":"@kestrel-hq/protocol-sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-protocol-sdk-0.2.0.tgz"}
+{"ts":"2025-09-07T14:03:28.544Z","package":"@kestrel-hq/reasons","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-reasons-0.2.0.tgz"}
+{"ts":"2025-09-07T14:03:28.544Z","package":"@kestrel-hq/sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-sdk-0.2.0.tgz"}
+{"ts":"2025-09-07T14:11:48.184Z","package":"@kestrel-hq/aerie","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-aerie-0.2.0.tgz"}
+{"ts":"2025-09-07T14:11:48.187Z","package":"@kestrel-hq/dto","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-dto-0.2.0.tgz"}
+{"ts":"2025-09-07T14:11:48.187Z","package":"@kestrel-hq/math","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-math-0.2.0.tgz"}
+{"ts":"2025-09-07T14:11:48.188Z","package":"@kestrel-hq/protocol-sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-protocol-sdk-0.2.0.tgz"}
+{"ts":"2025-09-07T14:11:48.188Z","package":"@kestrel-hq/reasons","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-reasons-0.2.0.tgz"}
+{"ts":"2025-09-07T14:11:48.188Z","package":"@kestrel-hq/sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-sdk-0.2.0.tgz"}
+{"ts":"2025-09-07T14:15:23.438Z","package":"@kestrel-hq/aerie","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-aerie-0.2.0.tgz"}
+{"ts":"2025-09-07T14:15:23.439Z","package":"@kestrel-hq/dto","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-dto-0.2.0.tgz"}
+{"ts":"2025-09-07T14:15:23.439Z","package":"@kestrel-hq/math","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-math-0.2.0.tgz"}
+{"ts":"2025-09-07T14:15:23.439Z","package":"@kestrel-hq/protocol-sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-protocol-sdk-0.2.0.tgz"}
+{"ts":"2025-09-07T14:15:23.439Z","package":"@kestrel-hq/reasons","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-reasons-0.2.0.tgz"}
+{"ts":"2025-09-07T14:15:23.439Z","package":"@kestrel-hq/sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":false,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-sdk-0.2.0.tgz"}
+{"ts":"2025-09-07T14:17:23.800Z","package":"@kestrel-hq/aerie","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-aerie-0.2.0.tgz"}
+{"ts":"2025-09-07T14:17:23.801Z","package":"@kestrel-hq/dto","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-dto-0.2.0.tgz"}
+{"ts":"2025-09-07T14:17:23.801Z","package":"@kestrel-hq/math","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-math-0.2.0.tgz"}
+{"ts":"2025-09-07T14:17:23.801Z","package":"@kestrel-hq/protocol-sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-protocol-sdk-0.2.0.tgz"}
+{"ts":"2025-09-07T14:17:23.801Z","package":"@kestrel-hq/reasons","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-reasons-0.2.0.tgz"}
+{"ts":"2025-09-07T14:17:23.801Z","package":"@kestrel-hq/sdk","version":"0.2.0","built":true,"packed":true,"sandboxInstalled":true,"tgz":"/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-sdk-0.2.0.tgz"}

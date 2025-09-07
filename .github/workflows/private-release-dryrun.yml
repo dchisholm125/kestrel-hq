@@ -1,0 +1,31 @@
+name: private-release-dryrun
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Install
+        run: pnpm i --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Pack
+        run: pnpm release:pack
+      - name: Upload tgz artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tgz-artifacts
+          path: packages/*/*.tgz

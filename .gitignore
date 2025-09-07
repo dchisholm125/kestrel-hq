@@ -65,3 +65,4 @@ nyc_output/
 !.env.example
 packages/**/.env*
 !packages/**/.env.example
+/.npmrc

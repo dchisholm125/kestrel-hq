@@ -3,7 +3,7 @@
  * Wraps a ReasonDetail to enforce a deterministic rejection shape across stages.
  * On construction, emits a single console.warn for observability.
  */
-import { ReasonDetail } from '@kestrel/dto'
+import { ReasonDetail } from '@kestrel-hq/dto'
 
 export class ReasonedRejection extends Error {
   public readonly reason: ReasonDetail

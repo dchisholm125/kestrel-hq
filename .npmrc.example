@@ -1,0 +1,2 @@
+@kestrel-hq:registry=https://<your-private-registry>
+//<your-private-registry>/:_authToken=${NPM_TOKEN}

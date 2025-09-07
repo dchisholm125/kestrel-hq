@@ -1,3 +1,9 @@
+# @kestrel-hq/aerie
+
+On-chain scanner and arbitrage opportunity helpers.
+
+- Depends on `@kestrel-hq/protocol-sdk`.
+- Exports via barrel `src/index.ts`.
 # Kestrel Aerie - OnChainScanner
 
 This package provides the `OnChainScanner` singleton that connects to an Ethereum WebSocket endpoint and emits:

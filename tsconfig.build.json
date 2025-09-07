@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/dto" },
+    { "path": "./packages/math" },
+    { "path": "./packages/reasons" },
+    { "path": "./packages/sdk" },
+    { "path": "./packages/protocol-sdk" },
+    { "path": "./packages/aerie" }
+  ]
+}

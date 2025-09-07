@@ -1,17 +1,35 @@
 {
-  "name": "@kestrel/reasons",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@kestrel-hq/reasons",
+  "version": "0.2.0",
+  "private": false,
   "description": "Centralized Reasons Registry and ReasonedRejection error for deterministic failures",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "sideEffects": false,
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "jest --passWithNoTests"
+    "build": "tsc -b",
+    "postbuild": "node ../../tools/build/dualize.js",
+    "test": "jest --passWithNoTests",
+    "prepublishOnly": "pnpm run build && pnpm test --if-present"
   },
   "dependencies": {
-    "@kestrel/dto": "workspace:0.1.0"
+    "@kestrel-hq/dto": "^0.2.0"
   },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://<your-private-registry>"
+  },
+  "packageManager": "pnpm@10.15.1",
   "devDependencies": {
     "typescript": "^5.5.0",
     "ts-jest": "^29.2.5",

@@ -5,6 +5,10 @@
   "main": "index.js",
   "scripts": {
   "test": "echo \"Error: no test specified\" && exit 1",
+  "build": "pnpm -r --filter './packages/*' build",
+  "release:pack": "pnpm -r --filter './packages/*' pack",
+  "release:publish": "pnpm -r --filter './packages/*' publish --no-git-checks",
+  "release:verify": "TS_NODE_PROJECT=tools/tsconfig.tools.json ts-node tools/release/verify.ts",
     "aerie:smoke": "npm --prefix packages/aerie run smoke",
   "test:x-pkg": "npm --prefix packages/tests-cross-pkg run test",
   "refactor:tsprune": "node tools/refactor/runTsPrune.js",

@@ -28,6 +28,88 @@ function isSafeToDelete(relPath: string): boolean {
   return true
 }
 
+function listWorkspacePackages(root: string): string[] {
+  const dir = path.join(root, 'packages')
+  if (!fs.existsSync(dir)) return []
+  return fs.readdirSync(dir)
+    .map(name => path.join(dir, name))
+    .filter(p => fs.existsSync(path.join(p, 'package.json')))
+}
+
+function toArray<T>(v: T | T[] | undefined): T[] { return v === undefined ? [] : Array.isArray(v) ? v : [v] }
+
+function resolveExportTargets(pkgDir: string, value: any): string[] {
+  // Accept string, array of strings, or object with possible fields
+  const targets: string[] = []
+  const pushIfString = (v: any) => { if (typeof v === 'string') targets.push(path.join(pkgDir, v)) }
+  if (typeof value === 'string') pushIfString(value)
+  else if (Array.isArray(value)) value.forEach(pushIfString)
+  else if (value && typeof value === 'object') {
+    // common subfields used in exports maps
+    const keys = ['default', 'import', 'require', 'types', 'node', 'browser']
+    for (const k of keys) pushIfString((value as any)[k])
+  }
+  return targets
+}
+
+function computeProtectedFiles(root: string): Set<string> {
+  const protectedSet = new Set<string>()
+  const pkgs = listWorkspacePackages(root)
+  for (const pkgDir of pkgs) {
+    try {
+      const pkgJsonPath = path.join(pkgDir, 'package.json')
+      const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8')) as any
+      const fields = ['main', 'module', 'types', 'typings'] as const
+      for (const f of fields) {
+        if (pkg[f]) protectedSet.add(path.relative(root, path.join(pkgDir, pkg[f])))
+      }
+      // bin can be string or object
+      if (pkg.bin) {
+        if (typeof pkg.bin === 'string') protectedSet.add(path.relative(root, path.join(pkgDir, pkg.bin)))
+        else if (typeof pkg.bin === 'object') {
+          for (const key of Object.keys(pkg.bin)) {
+            const v = pkg.bin[key]
+            if (typeof v === 'string') protectedSet.add(path.relative(root, path.join(pkgDir, v)))
+          }
+        }
+      }
+      // exports can be string, object, or map of subpaths
+      if (pkg.exports) {
+        if (typeof pkg.exports === 'string' || Array.isArray(pkg.exports) || typeof pkg.exports === 'object') {
+          if (typeof pkg.exports === 'string' || Array.isArray(pkg.exports)) {
+            for (const t of resolveExportTargets(pkgDir, pkg.exports)) {
+              protectedSet.add(path.relative(root, t))
+            }
+          } else {
+            for (const key of Object.keys(pkg.exports)) {
+              for (const t of resolveExportTargets(pkgDir, (pkg.exports as any)[key])) {
+                protectedSet.add(path.relative(root, t))
+              }
+            }
+          }
+        }
+      }
+      // common source entry files
+      const srcIndex = path.join(pkgDir, 'src', 'index.ts')
+      if (fs.existsSync(srcIndex)) protectedSet.add(path.relative(root, srcIndex))
+    } catch {}
+  }
+  return protectedSet
+}
+
+type DepCruise = { modules: Array<{ source: string; orphan?: boolean }> }
+
+function readCurrentOrphans(root: string): Set<string> {
+  const depPath = path.join(root, 'reports', 'depcruise.json')
+  if (!fs.existsSync(depPath)) return new Set()
+  try {
+    const dep = JSON.parse(fs.readFileSync(depPath, 'utf8')) as DepCruise
+    return new Set(dep.modules.filter(m => m.orphan).map(m => m.source))
+  } catch {
+    return new Set()
+  }
+}
+
 function stageDeletePlan(files: string[], root: string) {
   const reports = path.join(root, 'reports')
   const deletionsPath = path.join(reports, 'deletions.jsonl')
@@ -78,8 +160,15 @@ function main() {
     process.exit(1)
   }
   const aggregate = readJSON<Aggregate>(aggPath)
+  const protectedFiles = computeProtectedFiles(root)
+  const currentOrphans = readCurrentOrphans(root)
   const candidates = (aggregate.orphans || [])
+    // cross-check against current orphans to avoid stale reports
+    .filter(p => currentOrphans.has(p))
+    // safety filters
     .filter(p => isSafeToDelete(p))
+    // don't delete anything referenced by package entrypoints/exports
+    .filter(p => !protectedFiles.has(p))
   if (!candidates.length) {
     console.log('[refactor] no deletion candidates found')
     return

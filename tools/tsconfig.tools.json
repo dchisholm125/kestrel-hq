@@ -7,5 +7,5 @@
     "types": ["node"],
     "moduleResolution": "Node"
   },
-  "include": ["./refactor/**/*.ts"]
+  "include": ["./refactor/**/*.ts", "./release/**/*.ts"]
 }

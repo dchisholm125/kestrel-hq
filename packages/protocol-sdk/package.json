@@ -1,19 +1,36 @@
 {
-  "name": "@kestrel/protocol-sdk",
-  "version": "0.1.0",
-  "private": true,
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "name": "@kestrel-hq/protocol-sdk",
+  "version": "0.2.0",
+  "private": false,
+  "description": "Client SDK for Kestrel protocol APIs.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "sideEffects": false,
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node ../../tools/build/dualize.js",
     "clean": "rm -rf dist",
-    "prepare": "npm run build"
+    "prepublishOnly": "pnpm run build && pnpm test --if-present"
   },
   "dependencies": {
-  "node-fetch": "^2.6.12",
-  "@kestrel/dto": "workspace:0.1.0"
+    "node-fetch": "^2.6.12",
+  "@kestrel-hq/dto": "^0.2.0"
   },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://<your-private-registry>"
+  },
+  "packageManager": "pnpm@10.15.1",
   "devDependencies": {
     "typescript": "^5.2.2",
     "@types/node": "^20.3.1",

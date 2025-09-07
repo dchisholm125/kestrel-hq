@@ -22,7 +22,7 @@ export type SubmitResp = {
   correlation_id: string;
 };
 
-import { IntentState, ErrorEnvelope } from '../../dto/src/enums'
+import { IntentState, ErrorEnvelope } from '@kestrel-hq/dto'
 
 export type StatusResp = {
   intent_id: string;

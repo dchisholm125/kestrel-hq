@@ -1,4 +1,9 @@
-# @kestrel/protocol-sdk
+# @kestrel-hq/protocol-sdk
+
+Type-safe client for Kestrel protocol APIs with HMAC auth.
+
+- ESM with CJS fallback via `exports`.
+- Public surface defined by `src/index.ts`.# @kestrel/protocol-sdk
 
 Tiny TypeScript SDK for the Kestrel Protocol API. Exposes a small client with HMAC signing and idempotency header wiring.
 
