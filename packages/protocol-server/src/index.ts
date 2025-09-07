@@ -436,6 +436,22 @@ app.post('/intent', async (req: Request, res: Response) => {
     received_at: Date.now(),
     payload: body,
   }
+  // idempotency by hash: if we've already seen this hash recently, return stored state
+  const recent = intentStore.getByHash(request_hash)
+  if (recent) {
+    // If the stored payload is deeply equal to the incoming body, short-circuit and return current state
+    const storedPayload = recent.payload
+    const incomingCanonical = intentStore.computeHash(body)
+    const storedCanonical = intentStore.computeHash(storedPayload)
+    if (incomingCanonical === storedCanonical) {
+      return res.status(200).json({ intent_id: recent.intent_id, state: recent.state, request_hash: recent.request_hash, correlation_id: recent.correlation_id })
+    }
+    // same hash but different body (hash collision or replay) — mark as replay seen
+    const reason = getReason('SCREEN_REPLAY_SEEN')
+    const envelope = { corr_id: recent.correlation_id, request_hash: recent.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+    return res.status(reason.http_status).json(envelope)
+  }
+
   intentStore.put(row)
 
   // pipeline context
