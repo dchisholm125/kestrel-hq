@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@kestrel/dto": "workspace:0.1.0",
+    "pino": "^8.14.0",
     "express": "^5.1.0",
     "prom-client": "^14.0.1",
     "ulid": "^2.3.0",
