@@ -10,28 +10,28 @@
     "declaration": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-  "types": ["node", "mocha", "jest"],
-  "baseUrl": ".",
-  "paths": {
-  "@kestrel/reasons": ["../reasons/src/index.ts"],
-  "@kestrel/reasons/*": ["../reasons/src/*"],
-  "@kestrel/dto": ["../dto/src/index.ts"],
-  "@kestrel/math": ["../math/src/index.ts"]
-  }
+    "types": ["node", "mocha", "jest"],
+    "baseUrl": ".",
+    "paths": {}
   },
   "include": [
     "src/index.ts",
     "src/main.ts",
     "src/config.ts",
     "src/validators/**/*.ts",
-  "src/services/IntentStore.ts",
-  "src/services/IntentFSM.ts",
-  "src/services/MetricsTracker.ts",
-  "src/fsm/**/*.ts",
-  "src/db/**/*.ts",
-  "src/stages/**/*.ts",
+    "src/services/IntentStore.ts",
+    "src/services/IntentFSM.ts",
+    "src/services/MetricsTracker.ts",
+    "src/fsm/**/*.ts",
+    "src/db/**/*.ts",
+    "src/stages/**/*.ts",
     "src/utils/**/*.ts",
-  "src/simulation/**/*.ts",
-    "../dto/src/**/*.ts"
+    "src/simulation/**/*.ts",
+    "src/edge/**/*.ts"
+  ],
+  "references": [
+    { "path": "../dto" },
+    { "path": "../reasons" },
+    { "path": "../math" }
   ]
 }

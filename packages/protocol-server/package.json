@@ -20,6 +20,7 @@
   "dependencies": {
     "@kestrel/dto": "workspace:0.1.0",
   "@kestrel/reasons": "workspace:0.1.0",
+  "@kestrel/math": "workspace:0.1.0",
     "pino": "^8.14.0",
     "express": "^5.1.0",
     "prom-client": "^14.0.1",

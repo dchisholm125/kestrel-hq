@@ -8,8 +8,7 @@
 import { Request, Response } from 'express'
 import { intentStore } from '../services/IntentStore'
 import { ulid } from 'ulid'
-import { getReason } from '../../../dto/src/reasons'
-import { ErrorEnvelope, IntentState } from '../../../dto/src/enums'
+import { getReason, ErrorEnvelope, IntentState } from '@kestrel/dto'
 
 export function getStatus(req: Request, res: Response) {
   const id = req.params.intent_id

@@ -11,7 +11,7 @@
    On success, intent is moved to SCREENED.
 */
 
-import { IntentState, ReasonCategory } from '../../../dto/src/enums'
+import { IntentState, ReasonCategory } from '@kestrel/dto'
 import { reason } from '@kestrel/reasons'
 import { ReasonedRejection } from '@kestrel/reasons'
 

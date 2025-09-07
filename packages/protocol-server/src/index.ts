@@ -16,15 +16,15 @@ try {
   pendingPool = null
 }
 import FileLogger from './utils/fileLogger'
-import { IntentState } from '../../dto/src/enums'
+import { IntentState } from '@kestrel/dto'
 import { intentFSM } from './services/IntentFSM'
 const fileLogger = FileLogger.getInstance()
 import MetricsTracker from './services/MetricsTracker'
 import { ulid } from 'ulid'
 import { validateSubmitIntent } from './validators/submitIntentValidator'
 import { intentStore } from './services/IntentStore'
-import { getReason } from '../../dto/src/reasons'
-import { ErrorEnvelope } from '../../dto/src/enums'
+import { getReason } from '@kestrel/dto'
+import { ErrorEnvelope } from '@kestrel/dto'
 import crypto from 'crypto'
 import { screenIntent } from './stages/screen'
 import { validateIntent } from './stages/validate'
@@ -33,6 +33,7 @@ import { policyIntent } from './stages/policy'
 import { ReasonedRejection } from '@kestrel/reasons'
 import { appendRejection } from './utils/rejectionAudit'
 import { advanceIntent } from './fsm/transitionExecutor'
+import { getEdgeModules } from './edge/loader'
 
 // prefer the modular HTTP router when available
 let app: Express
@@ -466,6 +467,7 @@ app.post('/intent', async (req: Request, res: Response) => {
   intentStore.put(row)
 
   // pipeline context
+  const edge = await getEdgeModules()
   const ctxBase: any = {
     intent: row,
     corr_id: correlation_id,
@@ -476,6 +478,7 @@ app.post('/intent', async (req: Request, res: Response) => {
     },
     cache: { seen: async (h: string) => false },
     queue: { capacity: 100, enqueue: async (_: any) => true },
+    edge,
   }
 
   try {

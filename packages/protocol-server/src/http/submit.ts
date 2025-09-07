@@ -12,11 +12,11 @@ import { Request, Response } from 'express'
 import MetricsTracker from '../services/MetricsTracker'
 import { intentStore } from '../services/IntentStore'
 import { ulid } from 'ulid'
-import { getReason } from '../../../dto/src/reasons'
+import { getReason } from '@kestrel/dto'
 import { ReasonedRejection } from '@kestrel/reasons'
 import { appendRejection } from '../utils/rejectionAudit'
 import { advanceIntent } from '../fsm/transitionExecutor'
-import { IntentState, ErrorEnvelope } from '../../../dto/src/enums'
+import { IntentState, ErrorEnvelope } from '@kestrel/dto'
 
 export async function postIntent(req: Request, res: Response) {
   // lazy-load metrics tracker so tests can override the module at runtime

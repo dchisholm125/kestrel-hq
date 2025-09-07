@@ -7,10 +7,15 @@
 
 # Changelog
 
-- feat: step2 DB migration adds state/version, intent_events, and last-event MV
  - feat: fixtures generator/loader with JSONL manifest and validation tests
  - feat: add pure math package (@kestrel/math) with fee, scoring, probability helpers
  - feat: add gas/fee math (calcEffectiveGasCost, rebateSplit)
  - feat: add scoring math primitives (scoreByProfit, scoreByLatency, scoreByRisk, combineScores)
  - feat: add simulation stub using @kestrel/math to evaluate intents
  - feat(api): uniform ErrorEnvelope and corr_id middleware for submit/status; inline ladder in POST /intent
+
+## 0.1.6
+
+- feat: public edge interfaces (BundleAssembler, RelayRouter, InclusionPredictor, AntiMEV, CapitalPolicy)
+- feat: dynamic edge loader with NOOP defaults and JSONL audit (logs/edge-loader.jsonl)
+- docs: .env.example with KESTREL_PRIVATE_PLUGINS toggle

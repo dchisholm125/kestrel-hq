@@ -1,4 +1,4 @@
-import { IntentState } from '../../../dto/src/enums'
+import { IntentState } from '@kestrel/dto'
 
 export class StateMachine {
   private ALLOWED: Record<string, string[]> = {
