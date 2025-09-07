@@ -6,31 +6,33 @@
   "type": "commonjs",
   "main": "dist/protocol-server/src/index.js",
   "scripts": {
-  "build": "tsc -p tsconfig.json",
-  "start": "node dist/protocol-server/src/index.js",
-  "test": "jest --passWithNoTests",
-  "test:unit": "jest --testPathPattern=\"__tests__|test/unit\" --runInBand",
-  "test:fsm": "jest --testPathPattern=\"test/unit/(statemachine|intentfsm)\\.test\\.ts\" --runInBand",
-  "test:stages": "jest --testPathPattern=\"test/unit/stages\\.test\\.ts\" --runInBand"
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/protocol-server/src/index.js",
+    "test": "jest --passWithNoTests",
+    "test:unit": "jest --testPathPattern=\"__tests__|test/unit\" --runInBand",
+    "test:fsm": "jest --testPathPattern=\"test/unit/(statemachine|intentfsm)\\.test\\.ts\" --runInBand",
+    "test:stages": "jest --testPathPattern=\"test/unit/stages\\.test\\.ts\" --runInBand"
   },
   "dependencies": {
+    "@kestrel/dto": "workspace:0.1.0",
     "express": "^5.1.0",
-    "zod": "^3.22.2",
     "prom-client": "^14.0.1",
-  "ulid": "^2.3.0",
-  "@kestrel/dto": "workspace:0.1.0"
+    "ulid": "^2.3.0",
+    "zod": "^3.22.2"
   },
   "optionalDependencies": {
     "pg": "^8.11.0",
     "pg-promise": "^11.5.3"
   },
   "devDependencies": {
-  "@types/jest": "^29.0.0",
-  "jest": "^29.7.0",
-  "ts-jest": "^29.2.5",
-    "typescript": "^5.5.0",
-    "@types/node": "^20.3.1",
     "@types/express": "^5.0.3",
-    "@types/mocha": "^10.0.1"
+    "@types/jest": "^29.0.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.3.1",
+    "@types/supertest": "^2.0.16",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.4",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.5.0"
   }
 }

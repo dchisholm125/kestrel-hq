@@ -17,15 +17,19 @@ try {
 }
 import FileLogger from './utils/fileLogger'
 import { IntentState } from '../../dto/src/enums'
-import { intentFSM } from './services/IntentFSM.js'
+import { intentFSM } from './services/IntentFSM'
 const fileLogger = FileLogger.getInstance()
-import MetricsTracker from './services/MetricsTracker.js'
+import MetricsTracker from './services/MetricsTracker'
 import { ulid } from 'ulid'
-import { validateSubmitIntent } from './validators/submitIntentValidator.js'
-import { intentStore } from './services/IntentStore.js'
+import { validateSubmitIntent } from './validators/submitIntentValidator'
+import { intentStore } from './services/IntentStore'
 import { getReason } from '../../dto/src/reasons'
 import { ErrorEnvelope } from '../../dto/src/enums'
 import crypto from 'crypto'
+import { screenIntent } from './stages/screen'
+import { validateIntent } from './stages/validate'
+import { enrichIntent } from './stages/enrich'
+import { policyIntent } from './stages/policy'
 
 const app: Express = express()
 const port = ENV.API_SERVER_PORT || ENV.PORT || 3000
@@ -404,6 +408,112 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   })
 
   return res.status(200).json({ intent_id, decision: 'accepted', reason_code: 'ok', request_hash, status_url: `/v1/status/${intent_id}`, correlation_id })
+})
+
+// POST /intent - simplified intake that runs the stage pipeline synchronously.
+app.post('/intent', async (req: Request, res: Response) => {
+  const metrics = MetricsTracker.getInstance()
+  const started = Date.now()
+
+  const body = req.body || {}
+  // basic required field
+  if (!body.intent_id) {
+    const reason = getReason('CLIENT_BAD_REQUEST')
+    const envelope: ErrorEnvelope = { corr_id: `corr_missing_${Date.now()}`, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+    return res.status(reason.http_status).json(envelope)
+  }
+
+  const intent_id = body.intent_id
+  const correlation_id = `corr_${ulid()}`
+  const request_hash = intentStore.computeHash(body)
+
+  const row = {
+    intent_id,
+    request_hash,
+    correlation_id,
+    state: IntentState.RECEIVED,
+    reason_code: 'ok',
+    received_at: Date.now(),
+    payload: body,
+  }
+  intentStore.put(row)
+
+  // pipeline context
+  const ctxBase: any = {
+    intent: row,
+    corr_id: correlation_id,
+    request_hash,
+    cfg: {
+      limits: { maxBytes: 1024 * 10, minDeadlineMs: 0 },
+      feeMultiplier: 1.2,
+    },
+    cache: { seen: async (h: string) => false },
+    queue: { capacity: 100, enqueue: async (_: any) => true },
+  }
+
+  try {
+    // run stages synchronously; on any REJECTED, return error envelope
+    await screenIntent(ctxBase)
+    let updated = intentStore.getById(intent_id)
+    if (!updated) throw new Error('intent not found after screen')
+    if (updated.state === IntentState.REJECTED) {
+      const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
+      const envelope: ErrorEnvelope = { corr_id: updated.correlation_id, request_hash: updated.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      return res.status(reason.http_status).json(envelope)
+    }
+
+    await validateIntent(ctxBase)
+    updated = intentStore.getById(intent_id)
+    if (updated?.state === IntentState.REJECTED) {
+      const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
+      const envelope: ErrorEnvelope = { corr_id: updated.correlation_id, request_hash: updated.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      return res.status(reason.http_status).json(envelope)
+    }
+
+    await enrichIntent(ctxBase)
+    updated = intentStore.getById(intent_id)
+    if (updated?.state === IntentState.REJECTED) {
+      const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
+      const envelope: ErrorEnvelope = { corr_id: updated.correlation_id, request_hash: updated.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      return res.status(reason.http_status).json(envelope)
+    }
+
+    await policyIntent(ctxBase)
+    updated = intentStore.getById(intent_id)
+    if (updated?.state === IntentState.REJECTED) {
+      const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
+      const envelope: ErrorEnvelope = { corr_id: updated.correlation_id, request_hash: updated.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      return res.status(reason.http_status).json(envelope)
+    }
+
+    // success: return current state (could be QUEUED)
+    const final = intentStore.getById(intent_id)
+    return res.status(201).json({ intent_id, state: final?.state ?? IntentState.RECEIVED })
+  } catch (e) {
+    // unexpected error: mark REJECTED and return INTERNAL_ERROR
+    const stored = intentStore.getById(intent_id)
+    if (stored) {
+      stored.state = IntentState.REJECTED
+      stored.reason_code = 'INTERNAL_ERROR'
+      intentStore.put(stored)
+    }
+    const reason = getReason('INTERNAL_ERROR')
+    const envelope: ErrorEnvelope = { corr_id: stored?.correlation_id ?? `corr_${ulid()}`, request_hash: stored?.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+    return res.status(reason.http_status).json(envelope)
+  }
+})
+
+// GET /status/:intent_id - always return state and last_reason if available
+app.get('/status/:intent_id', (req: Request, res: Response) => {
+  const id = req.params.intent_id
+  const row = intentStore.getById(id)
+  if (!row) {
+    const reason = getReason('CLIENT_NOT_FOUND')
+    const envelope: ErrorEnvelope = { corr_id: `corr_${ulid()}`, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+    return res.status(reason.http_status).json(envelope)
+  }
+  const lastReason = row.reason_code && row.reason_code !== 'ok' ? (getReason(row.reason_code as any) || null) : null
+  return res.status(200).json({ intent_id: row.intent_id, state: row.state, last_reason: lastReason })
 })
 
 // GET /v1/status/:intent_id - return stored row

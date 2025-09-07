@@ -10,7 +10,7 @@
     "declaration": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node", "mocha"]
+  "types": ["node", "mocha", "jest"]
   },
   "include": [
     "src/index.ts",
@@ -22,6 +22,7 @@
   "src/services/MetricsTracker.ts",
   "src/fsm/**/*.ts",
   "src/db/**/*.ts",
+  "src/stages/**/*.ts",
     "src/utils/**/*.ts",
     "../dto/src/**/*.ts"
   ]
