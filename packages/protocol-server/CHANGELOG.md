@@ -10,4 +10,5 @@
 - feat: step2 DB migration adds state/version, intent_events, and last-event MV
  - feat: fixtures generator/loader with JSONL manifest and validation tests
  - feat: add pure math package (@kestrel/math) with fee, scoring, probability helpers
+ - feat: add gas/fee math (calcEffectiveGasCost, rebateSplit)
  - feat(api): uniform ErrorEnvelope and corr_id middleware for submit/status; inline ladder in POST /intent
