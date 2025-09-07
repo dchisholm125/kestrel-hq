@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express'
+import express, { Express, Request, Response } from 'express'
 import { ENV } from './config.js'
 import { validateSubmitBody } from './validators/submitValidator.js'
 // Lazy-load heavy services at runtime to keep the build surface small for quick developer flow
@@ -27,7 +27,7 @@ import { getReason } from '../../dto/src/reasons'
 import { ErrorEnvelope } from '../../dto/src/enums'
 import crypto from 'crypto'
 
-const app = express()
+const app: Express = express()
 const port = ENV.API_SERVER_PORT || ENV.PORT || 3000
 
 app.get('/health', (_req: Request, res: Response) => {

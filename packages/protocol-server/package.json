@@ -4,10 +4,10 @@
   "private": true,
   "description": "Kestrel protocol server (stub endpoints)",
   "type": "commonjs",
-  "main": "dist/src/index.js",
+  "main": "dist/protocol-server/src/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/src/index.js"
+    "start": "node dist/protocol-server/src/index.js"
   },
   "dependencies": {
     "express": "^5.1.0",
@@ -20,7 +20,7 @@
     "@types/jest": "^29.0.0",
     "typescript": "^5.5.0",
     "@types/node": "^20.3.1",
-  "@types/express": "^5.0.3",
-  "@types/mocha": "^10.0.1"
+    "@types/express": "^5.0.3",
+    "@types/mocha": "^10.0.1"
   }
 }

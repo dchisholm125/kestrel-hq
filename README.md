@@ -36,7 +36,11 @@ pnpm install
 # build all packages in the workspace
 pnpm -w -s build
 
-# start the protocol server (build step above required)
+
+# build the protocol server package (required before starting)
+pnpm --filter @kestrel/protocol-server run build
+
+# start the protocol server
 pnpm --filter @kestrel/protocol-server start
 
 # run the smoke script in the aerie package (example):
@@ -109,6 +113,8 @@ If you don't have pnpm, run tests per-package with `npm --prefix packages/<pkg> 
 ## Troubleshooting
 - `pnpm: command not found`: install pnpm globally with `npm i -g pnpm` or use the `npm --prefix` fallbacks shown above.
 - TypeScript import resolution errors between packages: ensure `packages/dto` is built first (`pnpm -w build` or `npm --prefix packages/dto run build`) or use the workspace build which builds packages in correct order.
+
+- `Error: Cannot find module 'dist/src/index.js'`: This means the build step was skipped or failed. Run `pnpm --filter @kestrel/protocol-server run build` before starting the server.
 
 ## Next steps (recommended)
 - Finish wiring `IntentFSM` into the full intake pipeline (RECEIVED → SCREENED → VALIDATED → ENRICHED → QUEUED|REJECTED → SUBMITTED → INCLUDED|DROPPED).
