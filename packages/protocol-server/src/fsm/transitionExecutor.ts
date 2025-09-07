@@ -8,7 +8,7 @@ export async function advanceIntent(opts: {
   to: IntentState | string
   corr_id: string
   request_hash?: string
-  reason?: { code: string; category?: string; message?: string; context?: any }
+  reason?: any
 }) {
   return db.tx(async (t: any) => {
     const row = await t.one('SELECT state, version FROM intents WHERE id=$1 FOR UPDATE', [opts.intentId])

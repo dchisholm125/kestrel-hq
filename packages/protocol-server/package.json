@@ -10,7 +10,8 @@
   "start": "node dist/protocol-server/src/index.js",
   "test": "jest --passWithNoTests",
   "test:unit": "jest --testPathPattern=\"__tests__|test/unit\" --runInBand",
-  "test:fsm": "jest --testPathPattern=\"test/unit/(statemachine|intentfsm)\\.test\\.ts\" --runInBand"
+  "test:fsm": "jest --testPathPattern=\"test/unit/(statemachine|intentfsm)\\.test\\.ts\" --runInBand",
+  "test:stages": "jest --testPathPattern=\"test/unit/stages\\.test\\.ts\" --runInBand"
   },
   "dependencies": {
     "express": "^5.1.0",
