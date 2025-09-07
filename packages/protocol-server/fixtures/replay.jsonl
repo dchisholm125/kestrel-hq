@@ -1,0 +1,2 @@
+{"intent_id":"33333333-3333-4333-8333-333333333333","from_state":null,"to_state":"RECEIVED","corr_id":"e2e-replay-1","ts":"2025-01-01T00:00:00.000Z"}
+{"intent_id":"33333333-3333-4333-8333-333333333333","from_state":"RECEIVED","to_state":"REJECTED","corr_id":"e2e-replay-1","reason_code":"SCREEN_REPLAY_SEEN","reason_category":"SCREEN","reason_message":"Rejecting at SCREEN: replay seen","context":{},"ts":"2025-01-01T00:00:00.100Z"}

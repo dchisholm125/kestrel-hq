@@ -8,4 +8,5 @@
 # Changelog
 
 - feat: step2 DB migration adds state/version, intent_events, and last-event MV
+ - feat: fixtures generator/loader with JSONL manifest and validation tests
  - feat(api): uniform ErrorEnvelope and corr_id middleware for submit/status; inline ladder in POST /intent

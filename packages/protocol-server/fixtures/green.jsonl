@@ -1,0 +1,5 @@
+{"intent_id":"11111111-1111-4111-8111-111111111111","from_state":null,"to_state":"RECEIVED","corr_id":"e2e-green-1","ts":"2025-01-01T00:00:00.000Z"}
+{"intent_id":"11111111-1111-4111-8111-111111111111","from_state":"RECEIVED","to_state":"SCREENED","corr_id":"e2e-green-1","ts":"2025-01-01T00:00:00.100Z"}
+{"intent_id":"11111111-1111-4111-8111-111111111111","from_state":"SCREENED","to_state":"VALIDATED","corr_id":"e2e-green-1","ts":"2025-01-01T00:00:00.200Z"}
+{"intent_id":"11111111-1111-4111-8111-111111111111","from_state":"VALIDATED","to_state":"ENRICHED","corr_id":"e2e-green-1","ts":"2025-01-01T00:00:00.300Z"}
+{"intent_id":"11111111-1111-4111-8111-111111111111","from_state":"ENRICHED","to_state":"QUEUED","corr_id":"e2e-green-1","ts":"2025-01-01T00:00:00.400Z"}

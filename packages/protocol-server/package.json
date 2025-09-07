@@ -13,7 +13,9 @@
     "test:fsm": "jest --testPathPattern=\"test/unit/(statemachine|intentfsm)\\.test\\.ts\" --runInBand",
     "test:stages": "jest --testPathPattern=\"test/unit/stages\\.test\\.ts\" --runInBand",
     "db:migrate": "ts-node ./scripts/dbMigrate.ts",
-    "db:refresh-intent-last": "ts-node -e \"require('./src/db/admin').refreshIntentLastEvent()\""
+  "db:refresh-intent-last": "ts-node -e \"require('./src/db/admin').refreshIntentLastEvent()\"",
+  "fixtures:make": "ts-node ./scripts/make-fixtures.ts",
+  "fixtures:load": "ts-node ./scripts/load-fixtures.ts"
   },
   "dependencies": {
     "@kestrel/dto": "workspace:0.1.0",

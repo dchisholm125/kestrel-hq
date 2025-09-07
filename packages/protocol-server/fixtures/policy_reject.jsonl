@@ -1,0 +1,5 @@
+{"intent_id":"22222222-2222-4222-8222-222222222222","from_state":null,"to_state":"RECEIVED","corr_id":"e2e-policy-1","ts":"2025-01-01T00:00:00.000Z"}
+{"intent_id":"22222222-2222-4222-8222-222222222222","from_state":"RECEIVED","to_state":"SCREENED","corr_id":"e2e-policy-1","ts":"2025-01-01T00:00:00.100Z"}
+{"intent_id":"22222222-2222-4222-8222-222222222222","from_state":"SCREENED","to_state":"VALIDATED","corr_id":"e2e-policy-1","ts":"2025-01-01T00:00:00.200Z"}
+{"intent_id":"22222222-2222-4222-8222-222222222222","from_state":"VALIDATED","to_state":"ENRICHED","corr_id":"e2e-policy-1","ts":"2025-01-01T00:00:00.300Z"}
+{"intent_id":"22222222-2222-4222-8222-222222222222","from_state":"ENRICHED","to_state":"REJECTED","corr_id":"e2e-policy-1","reason_code":"POLICY_FEE_TOO_LOW","reason_category":"POLICY","reason_message":"Rejecting at POLICY: fee too low","context":{},"ts":"2025-01-01T00:00:00.400Z"}
