@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs'
 import path from 'path'
+import os from 'os'
 
 /**
  * FileLogger
@@ -11,7 +12,10 @@ class FileLogger {
   private baseDir: string
 
   private constructor(baseDir?: string) {
-    this.baseDir = baseDir || '/home/ubuntu/Kestrel-HQ/logs'
+  // prefer provided baseDir; when running tests use a writable temp dir
+  if (baseDir) this.baseDir = baseDir
+  else if (process.env.NODE_ENV === 'test') this.baseDir = path.join(os.tmpdir(), 'kestrel-logs')
+  else this.baseDir = '/home/ubuntu/Kestrel-HQ/logs'
   }
 
   public static getInstance(baseDir?: string): FileLogger {

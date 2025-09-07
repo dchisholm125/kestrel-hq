@@ -17,9 +17,11 @@
     "src/main.ts",
     "src/config.ts",
     "src/validators/**/*.ts",
-    "src/services/IntentStore.ts",
-    "src/services/IntentFSM.ts",
-    "src/services/MetricsTracker.ts",
+  "src/services/IntentStore.ts",
+  "src/services/IntentFSM.ts",
+  "src/services/MetricsTracker.ts",
+  "src/fsm/**/*.ts",
+  "src/db/**/*.ts",
     "src/utils/**/*.ts",
     "../dto/src/**/*.ts"
   ]
