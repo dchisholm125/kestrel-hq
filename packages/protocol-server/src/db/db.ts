@@ -11,10 +11,34 @@ const pgPromise: any = (() => {
 import { ENV } from '../config.js'
 
 const connection = process.env.DATABASE_URL || 'postgres://localhost/kestrel'
-export const db: any = pgPromise ? pgPromise()(connection) : {
-	// lightweight fallback stubs for local dev: tx executes the function synchronously against a mock
+
+let realDb: any = null
+let triedInit = false
+
+async function initDb() {
+	if (realDb || triedInit) return realDb
+	triedInit = true
+	// diagnostic: trace why DB init is happening during tests
+	// eslint-disable-next-line no-console
+	console.debug('[db] initDb called, stack:\n', new Error().stack)
+	if (!pgPromise) return null
+	try {
+		realDb = pgPromise()(connection)
+	} catch (e) {
+		// eslint-disable-next-line no-console
+		console.warn('[db] lazy pg-promise init failed, continuing with stub:', (e as any)?.message || e)
+		realDb = null
+	}
+	return realDb
+}
+
+export const db: any = {
 	tx: async (fn: Function) => {
-		// simple in-memory stub that throws to indicate unavailable DB
-		throw new Error('db_unavailable')
+		// attempt to lazily initialize the real DB once
+		const r = await initDb()
+		if (!r) {
+			throw new Error('db_unavailable')
+		}
+		return r.tx(fn)
 	}
 }

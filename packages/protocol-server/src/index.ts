@@ -31,8 +31,16 @@ import { validateIntent } from './stages/validate'
 import { enrichIntent } from './stages/enrich'
 import { policyIntent } from './stages/policy'
 
-const app: Express = express()
+// prefer the modular HTTP router when available
+let app: Express
 const port = ENV.API_SERVER_PORT || ENV.PORT || 3000
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  const createApp = require('./http').createApp as () => Express
+  app = createApp()
+} catch (e) {
+  app = express()
+}
 
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'OK' })
