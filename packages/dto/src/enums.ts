@@ -40,9 +40,8 @@ export type ReasonCode =
   | "QUEUE_DEADLINE_TOO_SOON"
   | "SUBMIT_NOT_ATTEMPTED"
   | "NETWORK_RPC_UNAVAILABLE"
-  | "INTERNAL_ERROR";
-  // utility
-  export const __REASON_PLACEHOLDER = true
+  | "INTERNAL_ERROR"
+  | "CLIENT_NOT_FOUND";
 
 export interface ReasonDetail {
   code: ReasonCode;
@@ -50,4 +49,12 @@ export interface ReasonDetail {
   http_status: number;
   message: string;
   context?: Record<string, string | number | boolean>;
+}
+
+export interface ErrorEnvelope {
+  corr_id: string;
+  request_hash?: string;
+  state: IntentState;
+  reason: ReasonDetail;
+  ts: string; // RFC3339 UTC
 }

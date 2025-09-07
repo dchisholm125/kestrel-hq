@@ -59,8 +59,11 @@ export class ProtocolSDK {
     const text = await res.text();
     try {
       const json = text ? JSON.parse(text) : {};
-      if (!res.ok) return Promise.reject(json as ErrorResp);
-      return json as SubmitResp;
+      if (!res.ok) {
+        // Expect server to return canonical ErrorEnvelope for failures
+        return { ok: false, error: json } as any;
+      }
+      return { ok: true, intent_id: (json as any).intent_id, state: (json as any).state } as any;
     } catch (e) {
       throw new Error(`Invalid JSON response: ${e}`);
     }

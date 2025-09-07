@@ -22,7 +22,7 @@ export type SubmitResp = {
   correlation_id: string;
 };
 
-import { IntentState } from '../../dto/src/enums'
+import { IntentState, ErrorEnvelope } from '../../dto/src/enums'
 
 export type StatusResp = {
   intent_id: string;
@@ -47,3 +47,7 @@ export type ErrorResp = {
   retryable: boolean;
   suggested_backoff_ms?: number;
 };
+
+export type SubmitResult =
+  | { ok: true; intent_id: string; state: IntentState }
+  | { ok: false; error: ErrorEnvelope };

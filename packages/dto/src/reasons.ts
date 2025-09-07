@@ -36,6 +36,8 @@ export const REASONS: Record<ReasonCode, ReasonDetail> = {
 
   // INTERNAL 9xxx
   INTERNAL_ERROR: { code: 'INTERNAL_ERROR', category: ReasonCategory.INTERNAL, http_status: 500, message: 'Internal server error' },
+  // NOT FOUND
+  CLIENT_NOT_FOUND: { code: 'CLIENT_NOT_FOUND', category: ReasonCategory.CLIENT, http_status: 404, message: 'Not found' },
 }
 
 export function getReason(code: ReasonCode): ReasonDetail {

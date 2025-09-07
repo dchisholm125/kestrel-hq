@@ -19,7 +19,7 @@ paths:
             schema: { $ref: '#/components/schemas/SubmitIntent' }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/SubmitResp' }}}}
-        '4XX': { description: client error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResp' }}}}
+        '4XX': { description: client error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' }}}}
   /v1/status/{intent_id}:
     get:
       summary: Poll intent status
@@ -27,6 +27,7 @@ paths:
         - name: intent_id; in: path; required: true; schema: { type: string }
       responses:
         '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/StatusResp' }}}}
+        '4XX': { description: client error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' }}}}
 components:
   schemas:
     SubmitIntent:
@@ -92,3 +93,25 @@ components:
         reason_detail: { type: string }
         retryable: { type: boolean }
         suggested_backoff_ms: { type: integer, default: 0 }
+
+    IntentState:
+      type: string
+      enum: [RECEIVED, SCREENED, VALIDATED, ENRICHED, QUEUED, SUBMITTED, INCLUDED, DROPPED, REJECTED]
+
+    ErrorEnvelope:
+      type: object
+      required: [corr_id, state, reason, ts]
+      properties:
+        corr_id: { type: string }
+        request_hash: { type: string }
+        state: { $ref: '#/components/schemas/IntentState' }
+        reason:
+          type: object
+          required: [code, category, http_status, message]
+          properties:
+            code: { type: string }
+            category: { type: string }
+            http_status: { type: integer }
+            message: { type: string }
+            context: { type: object, additionalProperties: true }
+        ts: { type: string, format: date-time }

@@ -5,7 +5,7 @@
    In a real-world application, this would be backed by a persistent database. */
 
 import crypto from 'crypto'
-import { IntentState } from '../../dto/src/enums'
+import { IntentState } from '../../../dto/src/enums'
 
 export type IntentRow = {
   intent_id: string

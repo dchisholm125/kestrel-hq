@@ -23,6 +23,8 @@ import MetricsTracker from './services/MetricsTracker.js'
 import { ulid } from 'ulid'
 import { validateSubmitIntent } from './validators/submitIntentValidator.js'
 import { intentStore } from './services/IntentStore.js'
+import { getReason } from '../../dto/src/reasons'
+import { ErrorEnvelope } from '../../dto/src/enums'
 import crypto from 'crypto'
 
 const app = express()
@@ -278,7 +280,9 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   metrics.incReject('schema')
   metrics.recordProcessingTime(Date.now() - started)
   metrics.observeDecisionLatency(Date.now() - started)
-  return res.status(400).json({ reason_code: 'MISSING_HEADERS', reason_detail: 'required authentication headers missing', retryable: false, suggested_backoff_ms: 0 })
+  const reason = getReason('CLIENT_BAD_REQUEST')
+  const envelope: ErrorEnvelope = { corr_id: `corr_missing_${Date.now()}`, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+  return res.status(reason.http_status).json(envelope)
   }
 
   // body validation
@@ -288,7 +292,9 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
   metrics.incReject('schema')
   metrics.recordProcessingTime(Date.now() - started)
   metrics.observeDecisionLatency(Date.now() - started)
-  return res.status(400).json({ reason_code: 'INVALID_BODY', reason_detail: result.error, retryable: false, suggested_backoff_ms: 0 })
+  const reason = getReason('VALIDATION_SCHEMA_FAIL')
+  const envelope: ErrorEnvelope = { corr_id: `corr_${ulid()}`, request_hash: intentStore.computeHash(req.body), state: IntentState.REJECTED, reason: reason, ts: new Date().toISOString() }
+  return res.status(reason.http_status).json(envelope)
   }
 
   const body = result.value as any
@@ -332,14 +338,20 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
       metrics.incReject('stale')
       metrics.recordProcessingTime(Date.now() - started)
       metrics.observeDecisionLatency(Date.now() - started)
-      return res.status(400).json({ reason_code: 'BAD_TIMESTAMP', reason_detail: 'timestamp invalid', retryable: false, suggested_backoff_ms: 0 })
+      const reason = getReason('CLIENT_BAD_REQUEST')
+      const corr = `corr_${ulid()}`
+      const envelope: ErrorEnvelope = { corr_id: corr, request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      return res.status(reason.http_status).json(envelope)
     }
     const now = Date.now()
     if (Math.abs(now - tsNum) > 30_000) {
       metrics.incReject('stale')
       metrics.recordProcessingTime(Date.now() - started)
       metrics.observeDecisionLatency(Date.now() - started)
-      return res.status(400).json({ reason_code: 'TIMESTAMP_SKEW', reason_detail: 'timestamp outside allowed skew', retryable: true, suggested_backoff_ms: 1000 })
+      const reason = getReason('SCREEN_RATE_LIMIT')
+      const corr = `corr_${ulid()}`
+      const envelope: ErrorEnvelope = { corr_id: corr, request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      return res.status(reason.http_status).json(envelope)
     }
 
     // signature shape: HMAC-SHA256( apiKey || ":" || timestamp || ":" || sha256(body) )
@@ -350,7 +362,10 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
       metrics.incReject('denylist')
       metrics.recordProcessingTime(Date.now() - started)
       metrics.observeDecisionLatency(Date.now() - started)
-      return res.status(401).json({ reason_code: 'BAD_SIGNATURE', reason_detail: 'signature mismatch', retryable: false, suggested_backoff_ms: 0 })
+      const reason = getReason('VALIDATION_SIGNATURE_FAIL')
+      const corr = `corr_${ulid()}`
+      const envelope: ErrorEnvelope = { corr_id: corr, request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      return res.status(reason.http_status).json(envelope)
     }
   }
 
@@ -395,7 +410,11 @@ app.post('/v1/submit-intent', async (req: Request, res: Response) => {
 app.get('/v1/status/:intent_id', (req: Request, res: Response) => {
   const id = req.params.intent_id
   const row = intentStore.getById(id)
-  if (!row) return res.status(404).json({ reason_code: 'NOT_FOUND', reason_detail: 'intent not found', retryable: false, suggested_backoff_ms: 0 })
+  if (!row) {
+    const reason = getReason('CLIENT_NOT_FOUND')
+    const envelope: ErrorEnvelope = { corr_id: `corr_${ulid()}`, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+    return res.status(reason.http_status).json(envelope)
+  }
   return res.status(200).json({ intent_id: row.intent_id, state: row.state, reason_code: row.reason_code, sim_summary: null, bundle_id: null, relay_submissions: null, timestamps_ms: { received: row.received_at }, correlation_id: row.correlation_id })
 })
 

@@ -1,6 +1,7 @@
 import { intentStore } from '../../src/services/IntentStore'
 import { intentFSM } from '../../src/services/IntentFSM'
-import { IntentState } from '../../dto/src/enums'
+import { IntentState } from '../../../dto/src/enums'
+import 'jest'
 
 describe('IntentFSM', () => {
   beforeEach(() => {

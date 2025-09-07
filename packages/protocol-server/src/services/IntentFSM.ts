@@ -1,8 +1,8 @@
 import MetricsTracker from './MetricsTracker.js'
 import FileLogger from '../utils/fileLogger.js'
 import { intentStore, IntentRow } from './IntentStore.js'
-import { IntentState, ReasonCode } from '../../dto/src/enums'
-import { getReason } from '../../dto/src/reasons'
+import { IntentState, ReasonCode } from '../../../dto/src/enums'
+import { getReason } from '../../../dto/src/reasons'
 
 type FSMResult = { ok: boolean; row: IntentRow; reason?: ReturnType<typeof getReason> }
 
