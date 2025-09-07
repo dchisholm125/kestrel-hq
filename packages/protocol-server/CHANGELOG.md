@@ -12,4 +12,5 @@
  - feat: add pure math package (@kestrel/math) with fee, scoring, probability helpers
  - feat: add gas/fee math (calcEffectiveGasCost, rebateSplit)
  - feat: add scoring math primitives (scoreByProfit, scoreByLatency, scoreByRisk, combineScores)
+ - feat: add simulation stub using @kestrel/math to evaluate intents
  - feat(api): uniform ErrorEnvelope and corr_id middleware for submit/status; inline ladder in POST /intent

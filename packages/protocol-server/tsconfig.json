@@ -15,7 +15,8 @@
   "paths": {
   "@kestrel/reasons": ["../reasons/src/index.ts"],
   "@kestrel/reasons/*": ["../reasons/src/*"],
-    "@kestrel/dto": ["../dto/src/index.ts"]
+  "@kestrel/dto": ["../dto/src/index.ts"],
+  "@kestrel/math": ["../math/src/index.ts"]
   }
   },
   "include": [
@@ -30,6 +31,7 @@
   "src/db/**/*.ts",
   "src/stages/**/*.ts",
     "src/utils/**/*.ts",
+  "src/simulation/**/*.ts",
     "../dto/src/**/*.ts"
   ]
 }

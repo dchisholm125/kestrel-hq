@@ -9,7 +9,8 @@ module.exports = {
 	moduleNameMapper: {
 		'^@kestrel/reasons$': '<rootDir>/../reasons/src/index.ts',
 		'^@kestrel/reasons/(.*)$': '<rootDir>/../reasons/src/$1',
-		'^@kestrel/dto$': '<rootDir>/../dto/src/index.ts'
+		'^@kestrel/dto$': '<rootDir>/../dto/src/index.ts',
+		'^@kestrel/math$': '<rootDir>/../math/src/index.ts'
 	},
 	testPathIgnorePatterns: ['/node_modules/', '/dist/', '/test/integration/'],
 	// No aggressive moduleNameMapper to avoid remapping node_modules; shims added for local .js imports used by src
