@@ -17,6 +17,8 @@ import { ReasonedRejection } from '@kestrel/reasons'
 import { appendRejection } from '../utils/rejectionAudit'
 import { advanceIntent } from '../fsm/transitionExecutor'
 import { IntentState, ErrorEnvelope } from '@kestrel/dto'
+import { getEdgeModules } from '../edge/loader'
+import { submitPath } from '../pipeline/submitPath'
 
 export async function postIntent(req: Request, res: Response) {
   // lazy-load metrics tracker so tests can override the module at runtime
@@ -140,6 +142,18 @@ export async function postIntent(req: Request, res: Response) {
       const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
       const env: ErrorEnvelope = { corr_id: updated.correlation_id, request_hash: updated.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
       return res.status(reason.http_status).json(env)
+    }
+
+    // Post-QUEUED submission guard: same behavior as non-modular handler.
+    try {
+      const edge = await getEdgeModules()
+      await submitPath({ edge, intent: { intent_id }, corr_id: correlation_id, request_hash })
+    } catch (e) {
+      if (e instanceof ReasonedRejection && e.reason.code === 'SUBMIT_NOT_ATTEMPTED') {
+        // intentional no-op in public builds
+      } else {
+        throw e
+      }
     }
 
     const final = intentStore.getById(intent_id)

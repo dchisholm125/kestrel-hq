@@ -34,6 +34,7 @@ import { ReasonedRejection } from '@kestrel/reasons'
 import { appendRejection } from './utils/rejectionAudit'
 import { advanceIntent } from './fsm/transitionExecutor'
 import { getEdgeModules } from './edge/loader'
+import { submitPath } from './pipeline/submitPath'
 
 // prefer the modular HTTP router when available
 let app: Express
@@ -548,7 +549,18 @@ app.post('/intent', async (req: Request, res: Response) => {
       return res.status(reason.http_status).json(envelope)
     }
 
-    // success: return current state (could be QUEUED)
+    // Post-QUEUED submission path: run the public-build guard, but do not advance state beyond QUEUED here.
+    try {
+      await submitPath({ edge, intent: { intent_id }, corr_id: correlation_id, request_hash })
+    } catch (e) {
+      if (e instanceof ReasonedRejection && e.reason.code === 'SUBMIT_NOT_ATTEMPTED') {
+        // Do not advance state; just acknowledge QUEUED (deterministic, side-effect-free public build)
+      } else {
+        throw e
+      }
+    }
+
+  // success: return current state (public build remains at QUEUED)
     const final = intentStore.getById(intent_id)
     return res.status(201).json({ intent_id, state: final?.state ?? IntentState.RECEIVED })
   } catch (e) {

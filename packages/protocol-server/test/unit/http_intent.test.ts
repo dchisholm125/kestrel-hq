@@ -55,6 +55,24 @@ describe('/intent endpoint', () => {
     expect(stored?.state).toBe('QUEUED')
   })
 
+  it('public-build guard: stays QUEUED and writes submission-guard JSONL', async () => {
+    const body = { intent_id: 'i-http-guard-1', payload: { from: 'x' } }
+    const res = await request(app).post('/intent').send(body)
+    expect(res.status).toBe(201)
+    expect(res.body.intent_id).toBe(body.intent_id)
+    // final state remains QUEUED in public build
+    const stored = intentStore.getById(body.intent_id)
+    expect(stored?.state).toBe('QUEUED')
+    // verify JSONL guard entry exists
+    const fs = require('fs') as typeof import('fs')
+    const path = require('path') as typeof import('path')
+    const p = path.resolve(__dirname, '../../src/logs/submission-guard.jsonl')
+    expect(fs.existsSync(p)).toBe(true)
+    const content = fs.readFileSync(p, 'utf8')
+    expect(content).toContain('i-http-guard-1')
+    expect(content).toContain('SUBMIT_NOT_ATTEMPTED')
+  })
+
   it('returns 4xx when screen rejects', async () => {
     // mock screen to reject
     const screen = require('../../src/stages/screen').screenIntent

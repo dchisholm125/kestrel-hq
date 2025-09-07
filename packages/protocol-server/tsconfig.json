@@ -27,6 +27,7 @@
     "src/stages/**/*.ts",
     "src/utils/**/*.ts",
     "src/simulation/**/*.ts",
+  "src/pipeline/**/*.ts",
     "src/edge/**/*.ts"
   ],
   "references": [
