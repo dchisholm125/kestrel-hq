@@ -4,9 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+  "test": "echo \"Error: no test specified\" && exit 1",
     "aerie:smoke": "npm --prefix packages/aerie run smoke",
-    "test:x-pkg": "npm --prefix packages/tests-cross-pkg run test"
+  "test:x-pkg": "npm --prefix packages/tests-cross-pkg run test",
+  "refactor:tsprune": "node tools/refactor/runTsPrune.js",
+  "refactor:depcruise": "node tools/refactor/runDepCruise.js",
+  "refactor:collect": "ts-node tools/refactor/collectUnused.ts",
+  "refactor:apply": "ts-node tools/refactor/applyDeletions.ts"
   },
   "keywords": [],
   "author": "",
@@ -15,7 +19,13 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "jest": "^29.7.0",
-    "ts-jest": "^29.4.1",
+  "ts-jest": "^29.4.1",
+  "ts-node": "^10.9.2",
+  "dependency-cruiser": "^16.6.0",
+  "@typescript-eslint/eslint-plugin": "^7.18.0",
+  "@typescript-eslint/parser": "^7.18.0",
+  "eslint-plugin-import": "^2.29.1",
+  "ts-prune": "^0.10.3",
     "turbo": "^2.5.6"
   }
 }
