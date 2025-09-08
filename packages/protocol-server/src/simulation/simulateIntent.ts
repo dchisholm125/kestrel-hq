@@ -6,9 +6,9 @@
 
 import fs from 'fs'
 import path from 'path'
-import { calcBundleFee, rebateSplit } from '@kestrel/math'
-import { combineScores, scoreByLatency, scoreByProfit, scoreByRisk } from '@kestrel/math'
-import { expectedValue, normalizeProbs } from '@kestrel/math'
+import { calcBundleFee, rebateSplit } from '@kestrel-hq/math'
+import { combineScores, scoreByLatency, scoreByProfit, scoreByRisk } from '@kestrel-hq/math'
+import { expectedValue, normalizeProbs } from '@kestrel-hq/math'
 
 export type SimInputs = {
   profit: bigint

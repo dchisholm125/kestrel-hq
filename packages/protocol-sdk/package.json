@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "node-fetch": "^2.6.12",
-  "@kestrel-hq/dto": "^0.2.0"
+  "@kestrel-hq/dto": "workspace:0.2.0"
   },
   "publishConfig": {
     "access": "restricted",

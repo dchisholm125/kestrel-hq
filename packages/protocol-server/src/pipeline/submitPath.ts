@@ -9,7 +9,7 @@
 import fs from 'fs'
 import path from 'path'
 import type { EdgeModules } from '../edge/loader'
-import { reason, ReasonedRejection } from '@kestrel/reasons'
+import { reason, ReasonedRejection } from '@kestrel-hq/reasons'
 
 export type SubmitCtx = {
   edge: EdgeModules

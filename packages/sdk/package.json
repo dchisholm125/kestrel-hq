@@ -23,8 +23,8 @@
     "prepublishOnly": "pnpm run build && pnpm test --if-present"
   },
   "dependencies": {
-    "@kestrel-hq/dto": "^0.2.0",
-    "@kestrel-hq/math": "^0.2.0"
+  "@kestrel-hq/dto": "workspace:0.2.0",
+  "@kestrel-hq/math": "workspace:0.2.0"
   },
   "publishConfig": {
     "access": "restricted",

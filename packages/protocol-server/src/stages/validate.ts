@@ -5,9 +5,9 @@
    On failure, intent is moved to REJECTED with appropriate reason.
 */
 
-import { IntentState, ReasonCategory } from '@kestrel/dto'
-import { reason } from '@kestrel/reasons'
-import { ReasonedRejection } from '@kestrel/reasons'
+import { IntentState, ReasonCategory } from '@kestrel-hq/dto'
+import { reason } from '@kestrel-hq/reasons'
+import { ReasonedRejection } from '@kestrel-hq/reasons'
 
 type Ctx = {
   intent: any

@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": false,
   "description": "Centralized Reasons Registry and ReasonedRejection error for deterministic failures",
-  "type": "module",
+  "type": "commonjs",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,7 +23,7 @@
     "prepublishOnly": "pnpm run build && pnpm test --if-present"
   },
   "dependencies": {
-    "@kestrel-hq/dto": "^0.2.0"
+  "@kestrel-hq/dto": "workspace:0.2.0"
   },
   "publishConfig": {
     "access": "restricted",

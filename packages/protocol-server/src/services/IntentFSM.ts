@@ -1,7 +1,7 @@
 import MetricsTracker from './MetricsTracker'
 import FileLogger from '../utils/fileLogger'
 import { intentStore, IntentRow } from './IntentStore'
-import { IntentState, ReasonCode, getReason } from '@kestrel/dto'
+import { IntentState, ReasonCode, getReason } from '@kestrel-hq/dto'
 import { advanceIntent } from '../fsm/transitionExecutor'
 
 type FSMResult = { ok: boolean; row: IntentRow; reason?: ReturnType<typeof getReason> }

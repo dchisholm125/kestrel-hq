@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": false,
   "description": "Data Transfer Objects, enums, and shared types for Kestrel SDKs and services.",
-  "type": "module",
+  "type": "commonjs",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

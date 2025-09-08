@@ -1,4 +1,4 @@
-import { IntentState } from '@kestrel/dto'
+import { IntentState } from '@kestrel-hq/dto'
 
 export class StateMachine {
   private ALLOWED: Record<string, string[]> = {

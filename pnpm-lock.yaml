@@ -4,14 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@kestrel-hq/aerie': file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-aerie-0.2.0.tgz
-  '@kestrel-hq/dto': file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-dto-0.2.0.tgz
-  '@kestrel-hq/math': file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-math-0.2.0.tgz
-  '@kestrel-hq/protocol-sdk': file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-protocol-sdk-0.2.0.tgz
-  '@kestrel-hq/reasons': file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-reasons-0.2.0.tgz
-  '@kestrel-hq/sdk': file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-sdk-0.2.0.tgz
-
 importers:
 
   .:
@@ -49,9 +41,9 @@ importers:
 
   packages/aerie:
     dependencies:
-      '@kestrel/protocol-sdk':
-        specifier: file:../protocol-sdk
-        version: file:packages/protocol-sdk
+      '@kestrel-hq/protocol-sdk':
+        specifier: workspace:*
+        version: link:../protocol-sdk
       axios:
         specifier: ^1.6.8
         version: 1.11.0
@@ -104,8 +96,8 @@ importers:
 
   packages/protocol-sdk:
     dependencies:
-      '@kestrel/dto':
-        specifier: workspace:0.1.0
+      '@kestrel-hq/dto':
+        specifier: workspace:0.2.0
         version: link:../dto
       node-fetch:
         specifier: ^2.6.12
@@ -123,13 +115,13 @@ importers:
 
   packages/protocol-server:
     dependencies:
-      '@kestrel/dto':
-        specifier: workspace:0.1.0
+      '@kestrel-hq/dto':
+        specifier: workspace:0.2.0
         version: link:../dto
-      '@kestrel/math':
+      '@kestrel-hq/math':
         specifier: workspace:0.1.0
         version: link:../math
-      '@kestrel/reasons':
+      '@kestrel-hq/reasons':
         specifier: workspace:0.1.0
         version: link:../reasons
       express:
@@ -188,8 +180,8 @@ importers:
 
   packages/reasons:
     dependencies:
-      '@kestrel/dto':
-        specifier: workspace:0.1.0
+      '@kestrel-hq/dto':
+        specifier: workspace:0.2.0
         version: link:../dto
     devDependencies:
       jest:
@@ -204,11 +196,11 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@kestrel/dto':
-        specifier: workspace:0.1.0
+      '@kestrel-hq/dto':
+        specifier: workspace:0.2.0
         version: link:../dto
-      '@kestrel/math':
-        specifier: workspace:0.1.0
+      '@kestrel-hq/math':
+        specifier: workspace:0.2.0
         version: link:../math
     devDependencies:
       '@types/jest':
@@ -253,27 +245,6 @@ importers:
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@22.7.5)(typescript@5.9.2)
-
-  tmp-consumer:
-    dependencies:
-      '@kestrel-hq/aerie':
-        specifier: file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-aerie-0.2.0.tgz
-        version: file:kestrel-hq-aerie-0.2.0.tgz
-      '@kestrel-hq/dto':
-        specifier: file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-dto-0.2.0.tgz
-        version: file:kestrel-hq-dto-0.2.0.tgz
-      '@kestrel-hq/math':
-        specifier: file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-math-0.2.0.tgz
-        version: file:kestrel-hq-math-0.2.0.tgz
-      '@kestrel-hq/protocol-sdk':
-        specifier: file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-protocol-sdk-0.2.0.tgz
-        version: file:kestrel-hq-protocol-sdk-0.2.0.tgz
-      '@kestrel-hq/reasons':
-        specifier: file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-reasons-0.2.0.tgz
-        version: file:kestrel-hq-reasons-0.2.0.tgz
-      '@kestrel-hq/sdk':
-        specifier: file:/home/derek/Desktop/repos/kestrel-hq/kestrel-hq-sdk-0.2.0.tgz
-        version: file:kestrel-hq-sdk-0.2.0.tgz
 
 packages:
 
@@ -596,33 +567,6 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
-
-  '@kestrel-hq/aerie@file:kestrel-hq-aerie-0.2.0.tgz':
-    resolution: {integrity: sha512-lPkd4huFDYqSGL44Gwi9X0qpGTFGrtXr3P67XQsNC6OtiHyaKf12/W2rwPyXizeT+9PRL9rt8E25Xa445nMPLw==, tarball: file:kestrel-hq-aerie-0.2.0.tgz}
-    version: 0.2.0
-
-  '@kestrel-hq/dto@file:kestrel-hq-dto-0.2.0.tgz':
-    resolution: {integrity: sha512-QXq3ooFKBKVDAANBGYStL51tftN4MAnw/YKCgKrvIUSeyXhd9CXALJBF68jMiwWIodXREdSuQUBx8MOyc8B1ig==, tarball: file:kestrel-hq-dto-0.2.0.tgz}
-    version: 0.2.0
-
-  '@kestrel-hq/math@file:kestrel-hq-math-0.2.0.tgz':
-    resolution: {integrity: sha512-sNTKT0J93r/wNpNgx4TQZIqHr0epblM6FqGSN5WLKnVFGD36XlPl64SpPklV0okSdqwt1P9Ii8D112JDW1Sz5Q==, tarball: file:kestrel-hq-math-0.2.0.tgz}
-    version: 0.2.0
-
-  '@kestrel-hq/protocol-sdk@file:kestrel-hq-protocol-sdk-0.2.0.tgz':
-    resolution: {integrity: sha512-WbNxkETPXHdOpMksjS/U2akd9OhxrjWKyBYZ5SUyf8kHV0dFnFLPlBc/zQcsc3pLZDnv6DBkJCdFsTOfVUcedw==, tarball: file:kestrel-hq-protocol-sdk-0.2.0.tgz}
-    version: 0.2.0
-
-  '@kestrel-hq/reasons@file:kestrel-hq-reasons-0.2.0.tgz':
-    resolution: {integrity: sha512-Ktc/yejGnfXdmViBWojcTWCHZEuh9ee45aN6w91lc6xLW3b8JZgFaSKX2mOZ+iGdv1WxipIP3ImON5KFPP67hg==, tarball: file:kestrel-hq-reasons-0.2.0.tgz}
-    version: 0.2.0
-
-  '@kestrel-hq/sdk@file:kestrel-hq-sdk-0.2.0.tgz':
-    resolution: {integrity: sha512-8jpoEcbYuRJGLloDU06ZVp40T2YYMcV3jtBJ3kHtruED1EUhlb/xaern0R+zyzZQR3yIGkWtArxrkdEQpWGFnA==, tarball: file:kestrel-hq-sdk-0.2.0.tgz}
-    version: 0.2.0
-
-  '@kestrel/protocol-sdk@file:packages/protocol-sdk':
-    resolution: {directory: packages/protocol-sdk, type: directory}
 
   '@noble/curves@1.2.0':
     resolution: {integrity: sha512-oYclrNgRaM9SsBUBVbb8M6DTV7ZHRTKugureoYEncY5c65HOmRzvSiTE3y5CYaPYJA/GVkrhXEoF0M3Ya9PMnw==}
@@ -3572,45 +3516,6 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
-
-  '@kestrel-hq/aerie@file:kestrel-hq-aerie-0.2.0.tgz':
-    dependencies:
-      '@kestrel-hq/protocol-sdk': file:kestrel-hq-protocol-sdk-0.2.0.tgz
-      axios: 1.11.0
-      ethers: 6.15.0
-      ws: 8.18.3
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - encoding
-      - utf-8-validate
-
-  '@kestrel-hq/dto@file:kestrel-hq-dto-0.2.0.tgz': {}
-
-  '@kestrel-hq/math@file:kestrel-hq-math-0.2.0.tgz': {}
-
-  '@kestrel-hq/protocol-sdk@file:kestrel-hq-protocol-sdk-0.2.0.tgz':
-    dependencies:
-      '@kestrel-hq/dto': file:kestrel-hq-dto-0.2.0.tgz
-      node-fetch: 2.7.0
-    transitivePeerDependencies:
-      - encoding
-
-  '@kestrel-hq/reasons@file:kestrel-hq-reasons-0.2.0.tgz':
-    dependencies:
-      '@kestrel-hq/dto': file:kestrel-hq-dto-0.2.0.tgz
-
-  '@kestrel-hq/sdk@file:kestrel-hq-sdk-0.2.0.tgz':
-    dependencies:
-      '@kestrel-hq/dto': file:kestrel-hq-dto-0.2.0.tgz
-      '@kestrel-hq/math': file:kestrel-hq-math-0.2.0.tgz
-
-  '@kestrel/protocol-sdk@file:packages/protocol-sdk':
-    dependencies:
-      '@kestrel/dto': link:packages/dto
-      node-fetch: 2.7.0
-    transitivePeerDependencies:
-      - encoding
 
   '@noble/curves@1.2.0':
     dependencies:

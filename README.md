@@ -49,7 +49,7 @@ pnpm --filter @kestrel/protocol-server start
 
 # run the smoke script in the aerie package (example):
 # use the package name declared in `packages/aerie/package.json`:
-pnpm --filter @dchisholm125/kestrel-aerie run smoke
+pnpm --filter @kestrel-hq/aerie run smoke
 
 # or use a path-based filter (works regardless of package name):
 pnpm --filter ./packages/aerie run smoke

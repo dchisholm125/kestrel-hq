@@ -4,7 +4,7 @@
    On success, intent is moved to ENRICHED state.
 */
 
-import { IntentState } from '@kestrel/dto'
+import { IntentState } from '@kestrel-hq/dto'
 
 type Ctx = {
   intent: any
