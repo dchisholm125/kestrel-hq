@@ -4,21 +4,16 @@
  * Centralized configuration module for environment variables and constants.
  */
 
-// Load environment variables from .env file if it exists
-import fs from 'fs'
+// Load environment variables from .env.protocol-server file
+import dotenv from 'dotenv'
 import path from 'path'
+import { fileURLToPath } from 'url'
+import { dirname } from 'path'
 
-const envPath = path.join(process.cwd(), 'src', '.env')
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, 'utf8')
-  const envVars = envContent.split('\n').filter((line: string) => line.includes('='))
-  envVars.forEach((line: string) => {
-    const [key, value] = line.split('=')
-    if (key && value) {
-      process.env[key] = value
-    }
-  })
-}
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+dotenv.config({ path: path.join(__dirname, '..', '.env.protocol-server') })
 
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || 'development',
@@ -66,8 +61,8 @@ export const ENV = {
 
   // BloXroute configuration - use appropriate relay based on SEPOLIA_SWITCH
   BLOXROUTE_RELAY_URL: process.env.SEPOLIA_SWITCH === '1'
-    ? (process.env.BLOXROUTE_RELAY_SEPOLIA_WS_URL || 'wss://virginia-intents.blxrbdn.com/ws')
-    : (process.env.BLOXROUTE_RELAY_MAINNET_WS_URL || 'wss://virginia-mainnet.blxrbdn.com/ws'),
+    ? (process.env.BLOXROUTE_RELAY_SEPOLIA_HTTP_URL || 'https://virginia-intents.blxrbdn.com')
+    : (process.env.BLOXROUTE_RELAY_MAINNET_HTTP_URL || 'https://virginia-mainnet.blxrbdn.com'),
   BLOXROUTE_AUTH: process.env.BLOXROUTE_AUTH_HEADER || process.env.BLOXROUTE_AUTH || '',
 
   // Additional bloXroute gRPC endpoints
