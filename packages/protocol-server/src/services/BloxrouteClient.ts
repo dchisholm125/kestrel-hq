@@ -2,11 +2,25 @@ import axios, { AxiosInstance } from 'axios'
 
 /**
  * BloxrouteClient
- * Minimal JSON-RPC client wrapper for submitting MEV bundles to a bloXroute relay.
  *
- * NOTE: bloXroute documentation may reference method names such as `blxr_submit_bundle`.
- * This implementation uses `blxr_submit_bundle` with params: [{ txs: [signedTx] }].
- * Adjust the method or params to match any future schema changes as needed.
+ * Purpose:
+ *  - Minimal JSON-RPC client for submitting transaction bundles to a bloXroute relay
+ *  - Used by the Bundle Submitter ("Megaphone") to broadcast MEV bundles to the network
+ *
+ * Method:
+ *  - Uses JSON-RPC method `blx_submitBundle`
+ *  - Minimal params required by our pipeline: `{ txs: [signedTx] }`
+ *
+ * Auth:
+ *  - Send credentials via the HTTP Authorization header (value comes from env)
+ *
+ * Docs:
+ *  - bloXroute BDN (EVM) docs: https://docs.bloxroute.com/bsc-and-eth/evm-blockchain-distribution-network-bdn
+ *
+ * Notes:
+ *  - Some older references mention `blxr_submit_bundle`. This client intentionally uses
+ *    `blx_submitBundle` per current docs. If bloXroute updates params (e.g., target block,
+ *    timestamps, revertingTxHashes), extend the payload object accordingly.
  */
 export class BloxrouteClient {
   private relayUrl: string
@@ -22,7 +36,6 @@ export class BloxrouteClient {
     })
   }
 
-  /** Shape of JSON-RPC success response */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public async submitBundle(signedTransaction: string): Promise<any> {
     if (!/^0x[0-9a-fA-F]+$/.test(signedTransaction)) {
@@ -33,13 +46,20 @@ export class BloxrouteClient {
     const body = {
       jsonrpc: '2.0',
       id,
-      method: 'blxr_submit_bundle',
+      method: 'blx_submitBundle',
       params: [
         {
           txs: [signedTransaction]
         }
       ]
     }
+
+    // Observability: log submission attempt
+    console.info('[BloxrouteClient] Submitting bundle...', {
+      relay: this.relayUrl,
+      id,
+      txCount: 1
+    })
 
     try {
       const res = await this.http.post('', body, {
@@ -48,18 +68,42 @@ export class BloxrouteClient {
           Authorization: this.authHeader
         }
       })
+
+      // JSON-RPC error response
       if (res.data?.error) {
         const err = res.data.error
         const msg = typeof err === 'string' ? err : err.message || 'Unknown bloXroute error'
         throw new Error(`bloXroute relay error: ${msg}`)
       }
-      return res.data?.result ?? res.data
-    } catch (e) {
+
+      const result = res.data?.result ?? res.data
+      console.info('[BloxrouteClient] ✅ Submission successful', {
+        relay: this.relayUrl,
+        id,
+        // do not log full bundle contents; show minimal result info
+        hasResult: !!result
+      })
+      return result
+    } catch (e: unknown) {
       if (axios.isAxiosError(e)) {
         const status = e.response?.status
-        const detail = e.response?.data?.error || e.message
+        // try common JSON-RPC error shape or raw body
+        const detail =
+          (e.response?.data as any)?.error?.message ||
+          (e.response?.data as any)?.error ||
+          (e.response?.data as any) ||
+          e.message
+        console.info('[BloxrouteClient] ❌ Submission failed', {
+          relay: this.relayUrl,
+          status,
+          detail
+        })
         throw new Error(`bloXroute submitBundle failed (status=${status}): ${detail}`)
       }
+      console.info('[BloxrouteClient] ❌ Submission failed (non-axios error)', {
+        relay: this.relayUrl,
+        error: (e as Error)?.message
+      })
       throw e
     }
   }
