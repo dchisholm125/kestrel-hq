@@ -83,9 +83,10 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
       // Get current fees
       const { maxFeePerGas, maxPriorityFeePerGas } = await BumpPolicy.getInitialFees(provider, 1)
 
-      // For testnet self-transfer, tokenIn is not ETH, so value = 0
-      const isNativeIn = false; // Guard: only set value when path truly consumes native ETH
-      const txValue = isNativeIn ? 0n : 0n; // For self-transfer, always 0
+      // For testnet self-transfer, simulate native ETH consumption for testing
+      const isNativeIn = true; // Set to true to test native ETH spending guard
+      const amountInWei = 10000000000000000n; // 0.01 ETH for low test trade size
+      const txValue = isNativeIn ? amountInWei : 0n;
 
       // Build a simple self-transfer transaction for testing
       const signedTx = await buildAndSignEip1559Tx(wallet, {
