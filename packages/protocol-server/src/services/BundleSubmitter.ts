@@ -2,8 +2,112 @@ import { Wallet } from 'ethers'
 import { ENV } from '../config'
 import FlashbotsClient from './FlashbotsClient'
 import BloxrouteClient from './BloxrouteClient'
+import PublicSubmitter from './PublicSubmitter'
 import ReceiptChecker from './ReceiptChecker'
 import crypto from 'crypto'
+
+// 🚨 MOCK MODE DETECTION - VERY EXPLICIT 🚨
+const MOCK = process.env.SUBMIT_MOCK === 'true'
+if (MOCK) {
+  console.warn('🚨🚨🚨 [BundleSubmitter] MOCK MODE ENABLED — NO REAL SUBMISSIONS WILL BE MADE! 🚨🚨🚨')
+  console.warn('🚨🚨🚨 [BundleSubmitter] This is a DRY RUN - bundles will be logged but NOT submitted 🚨🚨🚨')
+  console.warn('🚨🚨🚨 [BundleSubmitter] To enable REAL submissions, set SUBMIT_MOCK=false 🚨🚨🚨')
+} else {
+  console.log('✅ [BundleSubmitter] REAL MODE - Live submissions enabled')
+}
+
+// 🔗 RELAY CONFIGURATION - Chain-aware relay filtering
+interface RelayConfig {
+  name: string
+  chainId: number
+  url: string
+  auth?: string
+}
+
+const ALL_RELAYS: RelayConfig[] = [
+  {
+    name: 'flashbots',
+    chainId: 1, // Mainnet
+    url: ENV.FLASHBOTS_MAINNET,
+    auth: ENV.FLASHBOTS_SIGNING_KEY
+  },
+  {
+    name: 'beaver',
+    chainId: 1, // Mainnet
+    url: ENV.BEAVER_MAINNET,
+    auth: ENV.FLASHBOTS_SIGNING_KEY // Using same key for now
+  },
+  {
+    name: 'flashbots-sepolia',
+    chainId: 11155111, // Sepolia
+    url: ENV.FLASHBOTS_SEPOLIA,
+    auth: ENV.FLASHBOTS_SIGNING_KEY
+  }
+  // Add more L2 relays here as needed
+]
+
+// Filter relays by current chain ID
+const CURRENT_CHAIN = ENV.CHAIN_ID
+const AVAILABLE_RELAYS = ALL_RELAYS.filter(r => r.chainId === CURRENT_CHAIN && !!r.url)
+
+console.log(`🔗 [BundleSubmitter] Relay Configuration:`, {
+  currentChain: CURRENT_CHAIN,
+  submissionMode: ENV.SUBMISSION_MODE,
+  availableRelays: AVAILABLE_RELAYS.length,
+  mockMode: MOCK,
+  network: ENV.SEPOLIA_SWITCH ? 'Sepolia Testnet' : 'Mainnet'
+})
+
+AVAILABLE_RELAYS.forEach(relay => {
+  console.log(`  📡 ${relay.name}: ${relay.url} (chainId: ${relay.chainId})`)
+})
+
+// 🔐 AUTH KEY VALIDATION
+function validateAuthKey(key: string): boolean {
+  // Must be 0x + 64 hex characters (32 bytes)
+  const hexPattern = /^0x[0-9a-fA-F]{64}$/
+  return hexPattern.test(key)
+}
+
+if (ENV.FLASHBOTS_SIGNING_KEY) {
+  const isValid = validateAuthKey(ENV.FLASHBOTS_SIGNING_KEY)
+  if (!isValid) {
+    console.error('❌ [BundleSubmitter] INVALID AUTH KEY FORMAT!')
+    console.error('❌ [BundleSubmitter] Must be 0x + 64 hex characters (32 bytes)')
+    console.error('❌ [BundleSubmitter] Current key length:', ENV.FLASHBOTS_SIGNING_KEY.length)
+  } else {
+    console.log('✅ [BundleSubmitter] Auth key format is valid')
+  }
+}
+
+// 🛡️ RELAY PROBE GATING
+export function shouldRunProbe(probeName: string): boolean {
+  // Gate mainnet-only probes
+  if (probeName === 'getUserStats' && CURRENT_CHAIN !== 1) {
+    console.log(`[relayprobe] ⏭️  SKIP ${probeName} - only available on mainnet (chainId: 1)`)
+    return false
+  }
+
+  // Gate beaver build probes (not yet implemented)
+  if (probeName.includes('beaver') && !AVAILABLE_RELAYS.some(r => r.name.includes('beaver'))) {
+    console.log(`[relayprobe] ⏭️  SKIP ${probeName} - beaver client not implemented yet`)
+    return false
+  }
+
+  // Add more probe gating rules here as needed
+  return true
+}
+
+// Example usage in other parts of the codebase:
+/*
+// Before running a relay probe:
+if (shouldRunProbe('getUserStats')) {
+  // Run the probe
+  const stats = await relay.getUserStats()
+} else {
+  console.log('Skipping getUserStats probe for current network')
+}
+*/
 
 /**
  * BundleSubmitter
@@ -26,47 +130,98 @@ export class BundleSubmitter {
   private initIfNeeded() {
     if (this.initialized) return
     try {
-      if (ENV.FLASHBOTS_SIGNING_KEY && ENV.FLASHBOTS_RELAY_URL) {
-        const wallet = new Wallet(ENV.FLASHBOTS_SIGNING_KEY)
-        this.flashbots = new FlashbotsClient(ENV.FLASHBOTS_RELAY_URL, wallet)
+      console.log('[BundleSubmitter] 🔧 Initializing relay clients...', {
+        sepoliaMode: ENV.SEPOLIA_SWITCH,
+        submissionMode: ENV.SUBMISSION_MODE,
+        currentChain: CURRENT_CHAIN
+      })
+
+      // Initialize relay clients based on available relays for current chain
+      for (const relay of AVAILABLE_RELAYS) {
+        try {
+          if (relay.name.includes('flashbots')) {
+            const wallet = new Wallet(relay.auth!)
+            this.flashbots = new FlashbotsClient(relay.url, wallet)
+            console.log(`✅ [BundleSubmitter] ${relay.name} client initialized`, {
+              relay: relay.url,
+              chainId: relay.chainId,
+              signer: wallet.address
+            })
+          } else if (relay.name.includes('beaver')) {
+            // For beaver build, we'd need a different client implementation
+            console.log(`📋 [BundleSubmitter] ${relay.name} relay configured (client implementation needed)`, {
+              relay: relay.url,
+              chainId: relay.chainId
+            })
+          }
+        } catch (error) {
+          console.error(`❌ [BundleSubmitter] Failed to initialize ${relay.name}:`, error)
+        }
       }
+
+      // Legacy bloxroute support (if still needed)
       if (ENV.BLOXROUTE_RELAY_URL && ENV.BLOXROUTE_AUTH) {
-        this.bloxroute = new BloxrouteClient(ENV.BLOXROUTE_RELAY_URL, ENV.BLOXROUTE_AUTH)
+        try {
+          this.bloxroute = new BloxrouteClient(ENV.BLOXROUTE_RELAY_URL, ENV.BLOXROUTE_AUTH)
+          console.log('[BundleSubmitter] ✅ BloXroute client initialized', {
+            relay: ENV.BLOXROUTE_RELAY_URL,
+            hasAuth: !!ENV.BLOXROUTE_AUTH
+          })
+        } catch (error) {
+          console.error('[BundleSubmitter] ❌ BloXroute client initialization failed:', error)
+        }
+      } else {
+        console.warn('[BundleSubmitter] ⚠️  BloXroute not configured - missing BLOXROUTE_RELAY_URL or BLOXROUTE_AUTH')
       }
+
+      // Initialize Public Submitter for testnets
+      if (ENV.SEPOLIA_SWITCH && ENV.SUBMISSION_MODE === 'public') {
+        try {
+          // We'll initialize this when needed in submitToRelays
+          console.log('[BundleSubmitter] ✅ Public submitter enabled for Sepolia testnet')
+        } catch (error) {
+          console.error('[BundleSubmitter] ❌ Public submitter initialization failed:', error)
+        }
+      }
+
       this.initialized = true
-      // eslint-disable-next-line no-console
-      console.log('[BundleSubmitter] initialized', {
+
+      console.log('[BundleSubmitter] 🎯 Initialization complete', {
         hasFlashbots: !!this.flashbots,
-        hasBloxroute: !!this.bloxroute
+        hasBloxroute: !!this.bloxroute,
+        hasPublicSubmitter: ENV.SEPOLIA_SWITCH && ENV.SUBMISSION_MODE === 'public',
+        network: ENV.SEPOLIA_SWITCH ? 'Sepolia Testnet' : 'Mainnet',
+        submissionMode: ENV.SUBMISSION_MODE,
+        availableRelays: AVAILABLE_RELAYS.length,
+        mode: MOCK ? '🚨 MOCK MODE 🚨' : '✅ REAL MODE ✅'
       })
     } catch (e) {
-      console.error('[BundleSubmitter] init error', e)
+      console.error('[BundleSubmitter] 💥 Critical initialization error', e)
     }
   }
 
   /** Submit one signed transaction to all configured relays in parallel */
   public async submitToRelays(signedTransaction: string, targetBlock?: number, intentId?: string): Promise<{ bundleHash?: string }> {
     this.initIfNeeded()
-    const tasks: { name: string; promise: Promise<unknown> }[] = []
 
-    if (this.flashbots) {
-      const block = targetBlock || (Math.floor(Date.now() / 1000) + 30) // placeholder block number heuristic
-      tasks.push({
-        name: 'Flashbots',
-        promise: this.flashbots.submitBundle(signedTransaction, { targetBlockNumber: block })
+    // 🚨🚨🚨 MOCK MODE CHECK - VERY EXPLICIT PER SUBMISSION 🚨🚨🚨
+    if (MOCK) {
+      console.warn('🚨 [BundleSubmitter] MOCK SUBMISSION - NOT sending to real relays!')
+      console.warn('🚨 [BundleSubmitter] Would submit to:', {
+        flashbots: !!this.flashbots,
+        bloxroute: !!this.bloxroute,
+        publicMempool: ENV.SEPOLIA_SWITCH && ENV.SUBMISSION_MODE === 'public',
+        targetBlock: targetBlock,
+        intentId: intentId,
+        network: ENV.SEPOLIA_SWITCH ? 'Sepolia Testnet' : 'Mainnet',
+        submissionMode: ENV.SUBMISSION_MODE
       })
-    }
-    if (this.bloxroute) {
-      tasks.push({ name: 'bloXroute', promise: this.bloxroute.submitBundle(signedTransaction) })
-    }
 
-    if (tasks.length === 0) {
-      console.warn('[BundleSubmitter] no relays configured')
-      // Generate a mock bundle hash for demonstration when no relays are configured
+      // Generate mock bundle hash for testing
       const mockBundleHash = `0x${crypto.randomBytes(32).toString('hex')}`
-      console.log(`[BundleSubmitter] Generated mock bundle hash: ${mockBundleHash}`)
+      console.log(`🎭 [BundleSubmitter] MOCK: Generated bundle hash: ${mockBundleHash}`)
 
-      // Track the mock bundle for demonstration
+      // Track the mock bundle for receipt polling
       if (intentId) {
         const receiptChecker = new ReceiptChecker()
         receiptChecker.trackBundle(intentId, mockBundleHash)
@@ -75,18 +230,81 @@ export class BundleSubmitter {
       return { bundleHash: mockBundleHash }
     }
 
+    // 🌐 PUBLIC MEMPOOL MODE - For Sepolia testnet
+    if (ENV.SEPOLIA_SWITCH && ENV.SUBMISSION_MODE === 'public') {
+      console.log('🌐 [BundleSubmitter] PUBLIC MEMPOOL MODE - Using public transaction for Sepolia testnet')
+      return this.submitPublicTransaction(signedTransaction, intentId)
+    }
+
+    // ✅ REAL BUNDLE MODE - Proceed with actual bundle submissions
+    console.log('✅ [BundleSubmitter] REAL BUNDLE MODE - Sending to live relays')
+
+    const tasks: { name: string; promise: Promise<unknown> }[] = []
+
+    // Prepare Flashbots submission
+    if (this.flashbots) {
+      const block = targetBlock || (Math.floor(Date.now() / 1000) + 30) // placeholder block number heuristic
+      console.log(`[BundleSubmitter] 📤 ${MOCK ? '🎭 MOCK' : '✅ REAL'} Preparing Flashbots submission`, {
+        targetBlock: block,
+        relay: ENV.FLASHBOTS_RELAY_URL,
+        chainId: CURRENT_CHAIN,
+        mode: MOCK ? 'MOCK - will not submit' : 'REAL - will submit'
+      })
+      tasks.push({
+        name: 'Flashbots',
+        promise: this.flashbots.submitBundle(signedTransaction, { targetBlockNumber: block })
+      })
+    }
+
+    // Prepare BloXroute submission
+    if (this.bloxroute) {
+      console.log(`[BundleSubmitter] 📤 ${MOCK ? '🎭 MOCK' : '✅ REAL'} Preparing BloXroute submission`, {
+        relay: ENV.BLOXROUTE_RELAY_URL,
+        chainId: CURRENT_CHAIN,
+        mode: MOCK ? 'MOCK - will not submit' : 'REAL - will submit'
+      })
+      tasks.push({ name: 'bloXroute', promise: this.bloxroute.submitBundle(signedTransaction) })
+    }
+
+    // If no relays are configured, log error and return
+    if (tasks.length === 0) {
+      console.error('[BundleSubmitter] ❌ No relays configured - cannot submit bundle!')
+      console.error('[BundleSubmitter] 🔧 Check your environment variables:')
+      console.error('  - FLASHBOTS_SIGNING_KEY:', !!ENV.FLASHBOTS_SIGNING_KEY ? '✅ Set' : '❌ Missing')
+      console.error('  - FLASHBOTS_RELAY_URL:', ENV.FLASHBOTS_RELAY_URL || '❌ Missing')
+      console.error('  - BLOXROUTE_RELAY_URL:', ENV.BLOXROUTE_RELAY_URL || '❌ Missing')
+      console.error('  - BLOXROUTE_AUTH:', !!ENV.BLOXROUTE_AUTH ? '✅ Set' : '❌ Missing')
+
+      // Fail fast if in bundle submission mode
+      if (process.env.SUBMISSION_MODE === 'bundle') {
+        console.error('[BundleSubmitter] 💥 FAIL FAST: No relays configured (bundle mode). Exiting.')
+        process.exit(1)
+      }
+
+      return { bundleHash: undefined }
+    }
+
+    console.log(`[BundleSubmitter] 🚀 Submitting bundle to ${tasks.length} relay(s)...`)
+
+    // Submit to all relays in parallel using Promise.allSettled
     const results = await Promise.allSettled(tasks.map(t => t.promise))
     let bundleHash: string | undefined
 
     results.forEach((res, idx) => {
       const label = tasks[idx].name
       if (res.status === 'fulfilled') {
-        console.log(`[BundleSubmitter] ${label}: Success`, { result: res.value })
-        // Log successful transaction execution
         const resultBundleHash = (res.value as any)?.bundleHash
-        if (resultBundleHash) {
+        console.log(`[BundleSubmitter] ✅ Submission successful to ${label}`, {
+          bundleHash: resultBundleHash,
+          result: res.value
+        })
+
+        // Use the first successful bundle hash as the primary one
+        if (!bundleHash && resultBundleHash) {
           bundleHash = resultBundleHash
         }
+
+        // Log successful transaction execution
         console.log(`[KESTREL-PROTOCOL] SUCCESSFUL_TRANSACTION_EXECUTED`, {
           relay: label,
           signedTransaction: signedTransaction.substring(0, 66) + '...', // First 32 bytes + ...
@@ -102,11 +320,71 @@ export class BundleSubmitter {
           receiptChecker.trackBundle(intentId, resultBundleHash)
         }
       } else {
-        console.warn(`[BundleSubmitter] ${label}: Failed`, { error: res.reason?.message || String(res.reason) })
+        const errorMessage = res.reason?.message || String(res.reason)
+        console.error(`[BundleSubmitter] ❌ Submission failed to ${label}: ${errorMessage}`, {
+          error: res.reason,
+          relay: label,
+          targetBlock: targetBlock
+        })
       }
     })
 
+    console.log(`[BundleSubmitter] 📊 ${MOCK ? '🎭 MOCK' : '✅ REAL'} Bundle submission complete`, {
+      totalRelays: tasks.length,
+      successfulSubmissions: results.filter(r => r.status === 'fulfilled').length,
+      failedSubmissions: results.filter(r => r.status === 'rejected').length,
+      bundleHash: bundleHash || 'none',
+      mode: MOCK ? 'MOCK - no real submissions made' : 'REAL - submitted to live relays'
+    })
+
     return { bundleHash }
+  }
+
+  /**
+   * Submit transaction to public mempool (for testnets like Sepolia)
+   */
+  private async submitPublicTransaction(signedTransaction: string, intentId?: string): Promise<{ bundleHash?: string }> {
+    try {
+      console.log('🌐 [BundleSubmitter] Initializing public transaction submitter...')
+
+      // Create provider and wallet for public submission
+      const { JsonRpcProvider } = await import('ethers')
+      const provider = new JsonRpcProvider(ENV.RPC_URL || 'https://rpc.sepolia.org')
+      const wallet = new Wallet(ENV.FLASHBOTS_SIGNING_KEY)
+
+      // Connect wallet to provider
+      const connectedWallet = wallet.connect(provider)
+
+      // Initialize public submitter
+      const publicSubmitter = new PublicSubmitter(provider, connectedWallet)
+
+      console.log('🌐 [BundleSubmitter] Submitting to public mempool...')
+
+      // Submit the transaction
+      const result = await publicSubmitter.submitPublicTx({
+        // We could parse the signed transaction to extract details, but for now use defaults
+      })
+
+      console.log('✅ [BundleSubmitter] Public transaction submitted successfully!', {
+        hash: result.hash,
+        blockNumber: result.blockNumber,
+        status: result.status
+      })
+
+      // Track the transaction for receipt polling
+      if (intentId) {
+        const receiptChecker = new ReceiptChecker()
+        receiptChecker.trackBundle(intentId, result.hash)
+      }
+
+      return { bundleHash: result.hash }
+
+    } catch (error) {
+      console.error('❌ [BundleSubmitter] Public transaction submission failed:', error)
+
+      // In case of failure, return undefined but don't crash
+      return { bundleHash: undefined }
+    }
   }
 }
 

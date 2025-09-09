@@ -37,11 +37,43 @@ export const ENV = {
   SKIP_SIGNATURE_CHECK: process.env.SKIP_SIGNATURE_CHECK === '1' || process.env.SKIP_SIGNATURE_CHECK === 'true',
   API_SECRET: process.env.API_SECRET || '',
   ARB_SENTINEL: process.env.ARB_SENTINEL || '',
-  FLASHBOTS_RELAY_URL: process.env.FLASHBOTS_RELAY_URL || 'https://relay.flashbots.net',
-  FLASHBOTS_SIGNING_KEY: process.env.FLASHBOTS_SIGNING_KEY || '',
-  BLOXROUTE_RELAY_URL: process.env.BLOXROUTE_RELAY_URL || 'https://blox.example',
-  BLOXROUTE_AUTH: process.env.BLOXROUTE_AUTH || ''
-  // Add more environment variables as needed
+
+  // Sepolia switch for testnet vs mainnet
+  SEPOLIA_SWITCH: process.env.SEPOLIA_SWITCH === '1',
+
+  // Submission mode: 'bundle' (private), 'public' (mempool), or 'normal' (auto)
+  SUBMISSION_MODE: process.env.SUBMISSION_MODE || 'normal',
+
+  // Mock mode for testing - VERY EXPLICIT
+  SUBMIT_MOCK: process.env.SUBMIT_MOCK === 'true',
+
+  // Chain ID for network detection
+  CHAIN_ID: process.env.CHAIN_ID ? Number(process.env.CHAIN_ID) : (process.env.SEPOLIA_SWITCH === '1' ? 11155111 : 1),
+
+  // Mainnet relay URLs
+  FLASHBOTS_MAINNET: process.env.FLASHBOTS_MAINNET || 'https://relay.flashbots.net',
+  BEAVER_MAINNET: process.env.BEAVER_MAINNET || '',
+
+  // Sepolia relay URLs (limited support)
+  FLASHBOTS_SEPOLIA: process.env.FLASHBOTS_SEPOLIA || 'https://relay-sepolia.flashbots.net',
+  BEAVER_SEPOLIA: process.env.BEAVER_SEPOLIA || '',
+
+  // Flashbots configuration - use appropriate relay based on SEPOLIA_SWITCH
+  FLASHBOTS_RELAY_URL: process.env.SEPOLIA_SWITCH === '1'
+    ? (process.env.SEPOLIA_FLASHBOTS_RELAY || 'https://relay-sepolia.flashbots.net')
+    : (process.env.FLASHBOTS_ENDPOINT || 'https://relay.flashbots.net'),
+  FLASHBOTS_SIGNING_KEY: process.env.FLASHBOTS_KEY || process.env.FLASHBOTS_SIGNING_KEY || '',
+
+  // BloXroute configuration - use appropriate relay based on SEPOLIA_SWITCH
+  BLOXROUTE_RELAY_URL: process.env.SEPOLIA_SWITCH === '1'
+    ? (process.env.BLOXROUTE_RELAY_SEPOLIA_WS_URL || 'wss://virginia-intents.blxrbdn.com/ws')
+    : (process.env.BLOXROUTE_RELAY_MAINNET_WS_URL || 'wss://virginia-mainnet.blxrbdn.com/ws'),
+  BLOXROUTE_AUTH: process.env.BLOXROUTE_AUTH_HEADER || process.env.BLOXROUTE_AUTH || '',
+
+  // Additional bloXroute gRPC endpoints
+  BLOXROUTE_GRPC_ENDPOINT: process.env.SEPOLIA_SWITCH === '1'
+    ? (process.env.BLOXROUTE_SEPOLIA_gRPC || 'virginia-intents.blxrbdn.com:5005')
+    : (process.env.BLOXROUTE_MAINNET_gRPC || 'virginia-mainnet.blxrbdn.com:5005')
 }
 
 export const CONSTANTS = {

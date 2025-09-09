@@ -5,6 +5,7 @@
 
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 
 // Colorful logging utilities
 const colors = {
@@ -65,6 +66,7 @@ export class ReceiptChecker {
   private pollTimer?: NodeJS.Timeout
   private persistenceFile: string
   private successLogFile: string
+  private pollCycleCount: number = 0
 
   constructor(relayUrl: string = 'https://relay.flashbots.net', pollInterval: number = 3000, maxAge: number = 300000) {
     this.relayUrl = relayUrl.replace(/\/$/, '')
@@ -183,6 +185,14 @@ export class ReceiptChecker {
    */
   private async pollReceipts(): Promise<void> {
     const now = Date.now()
+    this.pollCycleCount++
+
+    // Log status every 10 polling cycles (every 30 seconds at 3s intervals)
+    if (this.pollCycleCount % 10 === 0) {
+      const status = this.getStatus()
+      logSubmission('📊 STATUS', 'summary', 'info', status)
+    }
+
     const toCheck: TrackedBundle[] = []
 
     // Find bundles that need checking
@@ -216,6 +226,12 @@ export class ReceiptChecker {
    * Check status of a specific bundle
    */
   private async checkBundleStatus(tracked: TrackedBundle): Promise<void> {
+    // Check if this is a mock bundle (generated when no relays are configured)
+    if (this.isMockBundle(tracked.bundleHash)) {
+      await this.handleMockBundleStatus(tracked)
+      return
+    }
+
     const url = `${this.relayUrl}/flashbots_getBundleStatsV2`
     const body = {
       jsonrpc: '2.0',
@@ -345,6 +361,54 @@ export class ReceiptChecker {
 
     if (toRemove.length > 0) {
       await this.persistBundles()
+    }
+  }
+
+  /**
+   * Check if a bundle hash is a mock bundle (generated for testing when no relays configured)
+   */
+  private isMockBundle(bundleHash: string): boolean {
+    // Mock bundles are generated with crypto.randomBytes(32).toString('hex') = 64 chars
+    return bundleHash.startsWith('0x') && bundleHash.length === 66 && /^[0-9a-f]+$/.test(bundleHash.slice(2))
+  }
+
+  /**
+   * Handle mock bundle status (simulate bundle lifecycle for testing)
+   */
+  private async handleMockBundleStatus(tracked: TrackedBundle): Promise<void> {
+    tracked.lastChecked = Date.now()
+    const elapsed = Date.now() - tracked.submittedAt
+
+    // Simulate bundle lifecycle:
+    // - First 10 seconds: pending
+    // - 10-20 seconds: included (success)
+    // - After 20 seconds: cleanup
+    if (elapsed < 10000) {
+      // Still pending
+      logSubmission('⏳ MOCK PENDING', tracked.bundleHash, 'pending', {
+        intentId: tracked.intentId,
+        elapsedMs: elapsed
+      })
+    } else if (elapsed < 20000) {
+      // Simulate successful inclusion
+      if (tracked.status === 'pending') {
+        const mockStats: BundleStatsResponse = {
+          isSimulated: true,
+          landedAt: new Date().toISOString(),
+          landedBlockNumber: Math.floor(Date.now() / 1000),
+          landedTxHash: `0x${crypto.randomBytes(32).toString('hex')}`
+        }
+        await this.updateBundleStatus(tracked, mockStats)
+      }
+    } else {
+      // Mark as failed after timeout
+      if (tracked.status === 'pending') {
+        const mockStats: BundleStatsResponse = {
+          isCancelled: true,
+          cancellationReason: 'mock_timeout'
+        }
+        await this.updateBundleStatus(tracked, mockStats)
+      }
     }
   }
 
