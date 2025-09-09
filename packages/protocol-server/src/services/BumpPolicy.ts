@@ -1,5 +1,3 @@
-import { parseEther } from 'ethers'
-
 /**
  * BumpPolicy - Handles fee bumping for EIP-1559 Type-2 transactions
  */
@@ -19,12 +17,12 @@ export class BumpPolicy {
     try {
       const block = await provider.getBlock('pending')
       const baseFee = block.baseFeePerGas || 1000000000n // Fallback 1 gwei
-      const maxPriorityFeePerGas = parseEther((priorityGwei / 1000).toString()) // Convert gwei to wei
+      const maxPriorityFeePerGas = BigInt(priorityGwei) * 1000000000n // priorityGwei gwei to wei
       const maxFeePerGas = (baseFee * 2n) + maxPriorityFeePerGas
       return { maxFeePerGas, maxPriorityFeePerGas }
     } catch (error) {
       console.warn('[BumpPolicy] Failed to get baseFee, using defaults:', error)
-      const maxPriorityFeePerGas = parseEther('0.001') // 1 gwei
+      const maxPriorityFeePerGas = 1000000000n // 1 gwei
       const maxFeePerGas = 3000000000n // 3 gwei
       return { maxFeePerGas, maxPriorityFeePerGas }
     }
@@ -47,7 +45,7 @@ export class BumpPolicy {
     const bumpedFee = this.bumpValue(currentMaxFee)
 
     // Cap maxFeePerGas
-    const maxFeeCap = parseEther(this.MAX_FEE_GWEI.toString())
+    const maxFeeCap = this.MAX_FEE_GWEI * 1000000000n // 100 gwei in wei
     const finalMaxFee = bumpedFee > maxFeeCap ? maxFeeCap : bumpedFee
 
     console.log(`[BumpPolicy] Bumped fees: priority ${currentMaxPriority} -> ${bumpedPriority}, fee ${currentMaxFee} -> ${finalMaxFee}`)

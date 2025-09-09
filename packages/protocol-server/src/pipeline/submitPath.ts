@@ -96,6 +96,22 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
 
       console.log(`[submitPath] Funds check passed: balance=${ethers.formatEther(balance)} ETH, required=${ethers.formatEther(required)} ETH`)
 
+      // Pre-send log dump for debugging
+      console.log('[submitPath] Pre-send transaction details:', {
+        derivedAmountInWei: '0', // Self-transfer, no derived amount
+        txValue: '0', // value=0n
+        gasLimit: '21000',
+        maxFeePerGas: maxFeePerGas.toString(),
+        maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
+        from,
+        to: from, // Self-transfer
+        dataLength: '0x'.length,
+        nonce: nonce.toString(),
+        chainId: ENV.CHAIN_ID.toString(),
+        balanceWei: balance.toString(),
+        requiredWei: required.toString()
+      })
+
       // Build a simple self-transfer transaction for testing
       const signedTx = await buildAndSignEip1559Tx(wallet, {
         chainId: BigInt(ENV.CHAIN_ID),
