@@ -124,6 +124,12 @@ importers:
       '@kestrel-hq/reasons':
         specifier: workspace:0.1.0
         version: link:../reasons
+      axios:
+        specifier: ^1.6.0
+        version: 1.11.0
+      ethers:
+        specifier: ^6.8.0
+        version: 6.15.0
       express:
         specifier: ^5.1.0
         version: 5.1.0

@@ -11,8 +11,8 @@ import path from 'path'
 const envPath = path.join(process.cwd(), 'src', '.env')
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8')
-  const envVars = envContent.split('\n').filter(line => line.includes('='))
-  envVars.forEach(line => {
+  const envVars = envContent.split('\n').filter((line: string) => line.includes('='))
+  envVars.forEach((line: string) => {
     const [key, value] = line.split('=')
     if (key && value) {
       process.env[key] = value

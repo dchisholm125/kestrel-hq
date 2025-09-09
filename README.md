@@ -131,3 +131,23 @@ If you don't have pnpm, run tests per-package with `npm --prefix packages/<pkg> 
 
 ---
 If you'd like, I can continue wiring the FSM into the intake stages, or finish the server-wide replacement of ad-hoc errors with the canonical `ErrorEnvelope` (I left several places switched already). Tell me which follow-up you want and I'll proceed.
+
+
+
+
+
+
+--------------
+
+To successfully run the Kestrel Protocol, there are two critical steps:
+1. Start the public-facing Kestrel Protocol with `npm run start:protocol` in the `kestrel-hq/packages/protocol-server` directory.
+2. Run our private RPC Broker NATS server with `npm run live:proof` in the `kestrel-protocol-private/` directory.
+3. Create some bot instances!!! To run one, you can use `npm run bot` in the `kestrel-fleet-v0.2.0/` directory.
+
+Step 4 and beyond... run more instances?
+
+Create some unique bots and keep BUILDING!
+
+DEFI THE UNIVERSE! MAKE EVERYONE HAVE A SHOT AT CRYPTOCURRENCY!
+
+PROFIT TOGETHER!!! YAYYYYY!
