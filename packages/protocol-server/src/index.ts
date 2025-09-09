@@ -710,16 +710,25 @@ app.get('/metrics', async (_req: Request, res: Response) => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const isDirectRun = typeof require !== 'undefined' && (require as any).main === module
 if (isDirectRun) {
-  // Initialize ReceiptChecker for bundle status tracking
-  const receiptChecker = new ReceiptChecker()
+  // Initialize and start server
+  const startServer = async () => {
+    // Initialize ReceiptChecker for bundle status tracking
+    const receiptChecker = new ReceiptChecker()
+    await receiptChecker.initialize()
 
-  app.listen(port, () => {
-    logServer('🚀 SERVER STARTED', { port, mode: ENV.NODE_ENV || 'development', privatePlugins: process.env.KESTREL_PRIVATE_PLUGINS === '1' })
-    console.log(`Server running on port ${port}`)
+    app.listen(port, () => {
+      logServer('🚀 SERVER STARTED', { port, mode: ENV.NODE_ENV || 'development', privatePlugins: process.env.KESTREL_PRIVATE_PLUGINS === '1' })
+      console.log(`Server running on port ${port}`)
 
-    // Start receipt polling after server is ready
-    receiptChecker.startPolling()
-    logServer('🔄 RECEIPT POLLING STARTED', { interval: 3000, maxAge: 300000 })
+      // Start receipt polling after server is ready
+      receiptChecker.startPolling()
+      logServer('🔄 RECEIPT POLLING STARTED', { interval: 3000, maxAge: 300000 })
+    })
+  }
+
+  startServer().catch((error) => {
+    console.error('Failed to start server:', error)
+    process.exit(1)
   })
 }
 

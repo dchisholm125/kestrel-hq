@@ -1,11 +1,10 @@
 /**
  * ReceiptChecker - Polls Flashbots for bundle status receipts
  * Provides colorful logging for submission outcomes
- * Persists transactions to file for continuous monitoring
  */
 
-import fs from 'fs'
-import path from 'path'
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
 
 // Colorful logging utilities
 const colors = {
@@ -36,7 +35,7 @@ interface TrackedBundle {
   bundleHash: string
   submittedAt: number
   lastChecked: number
-  status: 'pending' | 'included' | 'failed' | 'unknown'
+  status: 'pending' | 'included' | 'failed'
   blockNumber?: number
   txHash?: string
 }
@@ -71,123 +70,83 @@ export class ReceiptChecker {
     this.relayUrl = relayUrl.replace(/\/$/, '')
     this.pollInterval = pollInterval
     this.maxAge = maxAge
-
-    // Set up persistence files
-    const logsDir = path.resolve(process.cwd(), '..', '..', 'kestrel-protocol-private', 'logs')
-    this.persistenceFile = path.join(logsDir, 'tracked_bundles.jsonl')
-    this.successLogFile = path.join(logsDir, 'SUCCESSFUL_TXs.jsonl')
-
-    // Ensure logs directory exists
-    try {
-      fs.mkdirSync(logsDir, { recursive: true })
-    } catch (e) {
-      console.warn('[ReceiptChecker] Failed to create logs directory:', e)
-    }
-
-    // Load existing transactions on startup
-    this.loadPersistedBundles()
+    this.persistenceFile = path.resolve(process.cwd(), 'logs', 'tracked-bundles.json')
+    this.successLogFile = path.resolve(process.cwd(), '..', '..', '..', 'kestrel-protocol-private', 'logs', 'SUCCESSFUL_TXs.jsonl')
   }
 
   /**
    * Load persisted bundles from file
    */
-  private loadPersistedBundles(): void {
+  private async loadPersistedBundles(): Promise<void> {
     try {
-      if (fs.existsSync(this.persistenceFile)) {
-        const content = fs.readFileSync(this.persistenceFile, 'utf8')
-        const lines = content.trim().split('\n').filter((line: string) => line.trim())
-
-        for (const line of lines) {
-          try {
-            const bundle: TrackedBundle = JSON.parse(line)
-            // Only load bundles that aren't too old and aren't completed
-            if (bundle.status === 'pending' && (Date.now() - bundle.submittedAt) < this.maxAge) {
-              this.trackedBundles.set(bundle.bundleHash, bundle)
-            }
-          } catch (e) {
-            console.warn('[ReceiptChecker] Failed to parse persisted bundle:', e)
-          }
-        }
-
-        if (this.trackedBundles.size > 0) {
-          logSubmission('📂 LOADED', `${this.trackedBundles.size} bundles`, 'from_file')
-        }
+      const data = await fs.readFile(this.persistenceFile, 'utf8')
+      const bundles: TrackedBundle[] = JSON.parse(data)
+      for (const bundle of bundles) {
+        this.trackedBundles.set(bundle.bundleHash, bundle)
       }
-    } catch (e) {
-      console.warn('[ReceiptChecker] Failed to load persisted bundles:', e)
+      logSubmission('📂 LOADED', `${bundles.length} bundles`, 'from_file')
+    } catch (error) {
+      // File doesn't exist or is corrupted, start fresh
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logSubmission('❌ LOAD ERROR', 'persistence file', 'corrupted', { error: (error as Error).message })
+      }
     }
   }
 
   /**
-   * Persist a bundle to file
+   * Persist all tracked bundles to file
    */
-  private persistBundle(bundle: TrackedBundle): void {
+  private async persistBundles(): Promise<void> {
     try {
-      const line = JSON.stringify(bundle) + '\n'
-      fs.appendFileSync(this.persistenceFile, line)
-    } catch (e) {
-      console.warn('[ReceiptChecker] Failed to persist bundle:', e)
+      const bundles = Array.from(this.trackedBundles.values())
+      await fs.mkdir(path.dirname(this.persistenceFile), { recursive: true })
+      await fs.writeFile(this.persistenceFile, JSON.stringify(bundles, null, 2))
+    } catch (error) {
+      logSubmission('❌ PERSIST ERROR', 'failed to save', 'to_file', { error: (error as Error).message })
     }
   }
 
   /**
-   * Remove a bundle from the persisted file
+   * Log successful transaction to dedicated file
    */
-  private removePersistedBundle(bundleHash: string): void {
+  private async logSuccessfulTransaction(tracked: TrackedBundle, stats: BundleStatsResponse): Promise<void> {
     try {
-      if (fs.existsSync(this.persistenceFile)) {
-        const content = fs.readFileSync(this.persistenceFile, 'utf8')
-        const lines = content.trim().split('\n').filter((line: string) => line.trim())
-
-        const filteredLines = lines.filter((line: string) => {
-          try {
-            const bundle: TrackedBundle = JSON.parse(line)
-            return bundle.bundleHash !== bundleHash
-          } catch {
-            return false // Remove malformed lines
-          }
-        })
-
-        fs.writeFileSync(this.persistenceFile, filteredLines.join('\n') + '\n')
-      }
-    } catch (e) {
-      console.warn('[ReceiptChecker] Failed to remove persisted bundle:', e)
-    }
-  }
-
-  /**
-   * Log successful transaction to success file
-   */
-  private logSuccessfulTransaction(bundle: TrackedBundle): void {
-    try {
-      const successRecord = {
-        timestamp: new Date().toISOString(),
-        intentId: bundle.intentId,
-        bundleHash: bundle.bundleHash,
-        submittedAt: new Date(bundle.submittedAt).toISOString(),
-        completedAt: new Date().toISOString(),
-        blockNumber: bundle.blockNumber,
-        txHash: bundle.txHash,
-        status: 'SUCCESS'
+      const successEntry = {
+        ts: new Date().toISOString(),
+        intentId: tracked.intentId,
+        bundleHash: tracked.bundleHash,
+        blockNumber: stats.landedBlockNumber,
+        txHash: stats.landedTxHash,
+        landedAt: stats.landedAt,
+        submittedAt: tracked.submittedAt,
+        processingTimeMs: Date.now() - tracked.submittedAt
       }
 
-      const line = JSON.stringify(successRecord) + '\n'
-      fs.appendFileSync(this.successLogFile, line)
+      await fs.mkdir(path.dirname(this.successLogFile), { recursive: true })
+      await fs.appendFile(this.successLogFile, JSON.stringify(successEntry) + '\n')
 
-      logSubmission('🎉 SUCCESS LOGGED', bundle.bundleHash, 'success', {
-        intentId: bundle.intentId,
-        blockNumber: bundle.blockNumber,
-        txHash: bundle.txHash
+      logSubmission('💰 SUCCESS LOGGED', tracked.bundleHash, 'to_file', {
+        intentId: tracked.intentId,
+        blockNumber: stats.landedBlockNumber,
+        txHash: stats.landedTxHash?.slice(0, 10) + '...'
       })
-    } catch (e) {
-      console.warn('[ReceiptChecker] Failed to log successful transaction:', e)
+    } catch (error) {
+      logSubmission('❌ SUCCESS LOG ERROR', tracked.bundleHash, 'failed', { error: (error as Error).message })
     }
+  }
+
+  /**
+   * Initialize ReceiptChecker - load persisted bundles
+   */
+  async initialize(): Promise<void> {
+    await this.loadPersistedBundles()
+    logSubmission('🚀 RECEIPT CHECKER', 'initialized', 'active', { loaded: this.trackedBundles.size })
   }
 
   /**
    * Track a newly submitted bundle
    */
-  trackBundle(intentId: string, bundleHash: string): void {
+  async trackBundle(intentId: string, bundleHash: string): Promise<void> {
     const tracked: TrackedBundle = {
       intentId,
       bundleHash,
@@ -196,7 +155,7 @@ export class ReceiptChecker {
       status: 'pending'
     }
     this.trackedBundles.set(bundleHash, tracked)
-    this.persistBundle(tracked)
+    await this.persistBundles()
     logSubmission('📋 TRACKING', bundleHash, 'pending', { intentId })
   }
 
@@ -250,7 +209,7 @@ export class ReceiptChecker {
     }
 
     // Clean up old bundles
-    this.cleanupOldBundles(now)
+    await this.cleanupOldBundles(now)
   }
 
   /**
@@ -290,7 +249,7 @@ export class ReceiptChecker {
 
       const stats: BundleStatsResponse = data.result
 
-      this.updateBundleStatus(tracked, stats)
+      await this.updateBundleStatus(tracked, stats)
 
     } catch (error) {
       // Don't throw, just log the error
@@ -304,7 +263,7 @@ export class ReceiptChecker {
   /**
    * Update bundle status based on Flashbots response
    */
-  private updateBundleStatus(tracked: TrackedBundle, stats: BundleStatsResponse): void {
+  private async updateBundleStatus(tracked: TrackedBundle, stats: BundleStatsResponse): Promise<void> {
     const oldStatus = tracked.status
 
     if (stats.isCancelled) {
@@ -323,6 +282,9 @@ export class ReceiptChecker {
         txHash: stats.landedTxHash,
         landedAt: stats.landedAt
       })
+
+      // Log successful transaction to dedicated file
+      await this.logSuccessfulTransaction(tracked, stats)
     } else if (stats.isSentToMiners) {
       // Still pending but sent to miners
       logSubmission('📤 SENT TO MINERS', tracked.bundleHash, 'pending', {
@@ -344,28 +306,24 @@ export class ReceiptChecker {
       })
     }
 
-    // If status changed to final state, handle completion
+    // If status changed to final state, we can stop tracking
     if ((oldStatus === 'pending') && (tracked.status === 'included' || tracked.status === 'failed')) {
-      // Log successful transactions to success file
-      if (tracked.status === 'included') {
-        this.logSuccessfulTransaction(tracked)
-      }
-
-      // Remove from persistence immediately
-      this.removePersistedBundle(tracked.bundleHash)
-
-      // Keep in memory for a bit longer to show final status, then clean up
-      setTimeout(() => {
+      // Keep tracking for a bit longer to show final status
+      setTimeout(async () => {
         this.trackedBundles.delete(tracked.bundleHash)
+        await this.persistBundles()
         logSubmission('🗑️ CLEANUP', tracked.bundleHash, 'removed', { intentId: tracked.intentId })
       }, 10000) // Keep for 10 seconds after final status
+    } else {
+      // Update persistence for status changes
+      await this.persistBundles()
     }
   }
 
   /**
    * Clean up bundles that are too old
    */
-  private cleanupOldBundles(now: number): void {
+  private async cleanupOldBundles(now: number): Promise<void> {
     const toRemove: string[] = []
 
     for (const [bundleHash, tracked] of this.trackedBundles) {
@@ -381,9 +339,12 @@ export class ReceiptChecker {
           intentId: tracked.intentId,
           age: Math.round((now - tracked.submittedAt) / 1000)
         })
-        this.removePersistedBundle(bundleHash)
         this.trackedBundles.delete(bundleHash)
       }
+    }
+
+    if (toRemove.length > 0) {
+      await this.persistBundles()
     }
   }
 
