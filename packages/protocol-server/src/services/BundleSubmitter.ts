@@ -245,14 +245,26 @@ export class BundleSubmitter {
       return { bundleHash: mockBundleHash }
     }
 
-    // 🌐 PUBLIC MEMPOOL MODE - For Sepolia testnet (automatic when SEPOLIA_SWITCH=1)
+    // 🌐 PUBLIC EOA PATH - For Sepolia testnet (automatic when SEPOLIA_SWITCH=1)
+    // Requires sufficient wallet balance for value + fees. Good for tiny smoke tests.
     if (ENV.SEPOLIA_SWITCH) {
-      console.log('🌐 [BundleSubmitter] PUBLIC MEMPOOL MODE - Using public transaction for Sepolia testnet')
+      console.log('🌐 [BundleSubmitter] PUBLIC EOA PATH - Using public transaction for Sepolia testnet')
       return this.submitPublicTransaction(signedTransaction, intentId)
     }
 
-    // ✅ REAL BUNDLE MODE - For mainnet with proper relay configuration
-    console.log('✅ [BundleSubmitter] REAL BUNDLE MODE - Sending to live relays')
+    // 🔒 PRIVATE BUNDLE PATH - For mainnet with relays (Flashbots / builder RPC)
+    // No tx.value unless you really need it; best for production arbs.
+    console.log('🔒 [BundleSubmitter] PRIVATE BUNDLE PATH - Sending to live relays')
+
+    // Guard: Check for tx.value in private bundle path
+    try {
+      const parsed = Transaction.from(signedTransaction)
+      if (parsed.value > 0n) {
+        console.warn('⚠️ [BundleSubmitter] PRIVATE BUNDLE PATH: tx.value > 0 detected. Ensure this is intentional; prefer flash-loans for native ETH consumption.')
+      }
+    } catch (e) {
+      console.warn('[BundleSubmitter] Could not parse transaction for value check:', e)
+    }
 
     const tasks: { name: string; promise: Promise<unknown> }[] = []
 
