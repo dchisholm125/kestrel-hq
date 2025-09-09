@@ -1,0 +1,22 @@
+{
+  "summary": {
+    "tsprunePackages": 0,
+    "tspruneUnused": 0,
+    "orphans": 0,
+    "markers": 2
+  },
+  "tsprune": {},
+  "orphans": [],
+  "markers": [
+    {
+      "file": "tools/refactor/collectUnused.ts",
+      "line": 3,
+      "marker": "TODO_DEAD"
+    },
+    {
+      "file": "tools/refactor/collectUnused.ts",
+      "line": 3,
+      "marker": "@deprecated"
+    }
+  ]
+}

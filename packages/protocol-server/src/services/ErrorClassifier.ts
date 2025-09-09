@@ -8,11 +8,13 @@ import BumpPolicy from './BumpPolicy'
  * Error Classification and Handling for Ethereum Transaction Submissions
  */
 export enum ErrorAction {
-  ACCEPT_SUCCESS = 'accept_success',           // Treat as success (e.g., already known)
-  BUMP_FEE_RETRY = 'bump_fee_retry',           // Bump fees and retry same nonce
-  REFRESH_NONCE_RESCHEDULE = 'refresh_nonce_reschedule', // Refresh nonce and retry
-  HARD_FAIL = 'hard_fail',                     // Fail immediately with clear message
-  BACKOFF_RETRY = 'backoff_retry'              // Backoff and retry with limit
+  ACCEPT_SUCCESS = 'accept_success', // already known → treat as success
+  BUMP_FEE_RETRY = 'bump_and_retry', // replacement underpriced → bump and retry same nonce
+  REFRESH_NONCE_RESCHEDULE = 'refresh_nonce_reschedule', // nonce too low → refresh
+  HARD_FAIL = 'hard_fail_insufficient_funds', // insufficient funds → hard fail
+  HARD_FAIL_PROVIDER_BALANCE_FETCH = 'hard_fail_provider_balance_fetch', // provider balance fetch fail
+  BACKOFF_RETRY = 'backoff_retry', // limited retry on misc
+  FALLBACK_TO_TYPE2_LEGACY = 'fallback_to_type2_legacy' // RPC says type not supported
 }
 
 export interface ErrorClassification {
@@ -28,11 +30,17 @@ export class ErrorClassifier {
    * Classify an error and determine the appropriate action
    */
   static classifyError(error: any): ErrorClassification {
-    const msg = (error?.error?.message || error?.message || '').toLowerCase()
+    let originalMessage = error?.error?.message
+      || error?.error?.data?.message
+      || (() => { try { const b = error?.body; if (!b) return undefined; const j = JSON.parse(b); return j?.error?.message || j?.message } catch { return undefined } })()
+      || error?.message
+      || ''
+    const msg = originalMessage.toLowerCase()
     const code = error?.error?.code || error?.code
+    console.error('[ErrorClassifier] RPC error:', { code, message: originalMessage })
 
     // Already known - transaction is already in mempool
-    if (msg.includes('already known')) {
+  if (/already known/i.test(msg)) {
       return {
         action: ErrorAction.ACCEPT_SUCCESS,
         reason: 'Transaction already known to network',
@@ -42,17 +50,17 @@ export class ErrorClassifier {
     }
 
     // Replacement underpriced - need higher fees for same nonce
-    if (msg.includes('replacement transaction underpriced') || msg.includes('transaction underpriced')) {
+  if (/replacement transaction underpriced|transaction underpriced/i.test(msg)) {
       return {
         action: ErrorAction.BUMP_FEE_RETRY,
-        reason: 'Transaction fees too low for replacement',
+    reason: 'Transaction fees too low for replacement',
         retryable: true,
         maxRetries: 3
       }
     }
 
     // Nonce too low - our nonce is behind the network
-    if (msg.includes('nonce too low') || code === -32000 && msg.includes('nonce')) {
+  if (/nonce too low/i.test(msg) || (code === -32000 && /nonce/i.test(msg))) {
       return {
         action: ErrorAction.REFRESH_NONCE_RESCHEDULE,
         reason: 'Nonce is too low, needs refresh',
@@ -62,9 +70,9 @@ export class ErrorClassifier {
     }
 
     // Insufficient funds - wallet doesn't have enough ETH
-    if (msg.includes('insufficient funds') || msg.includes('not enough funds')) {
+  if (/insufficient funds|not enough funds/i.test(msg)) {
       return {
-        action: ErrorAction.HARD_FAIL,
+    action: ErrorAction.HARD_FAIL,
         reason: 'Insufficient funds in wallet',
         retryable: false,
         maxRetries: 0
@@ -72,13 +80,13 @@ export class ErrorClassifier {
     }
 
     // Transaction type not supported - fallback to new transaction
-    if (msg.includes('transaction type not supported') || msg.includes('rlp: expected input list') || msg.includes('invalid-raw-tx')) {
+  if (/transaction type not supported|rlp: expected input list|invalid-raw-tx/i.test(msg)) {
       return {
-        action: ErrorAction.BACKOFF_RETRY,
-        reason: 'Transaction type not supported by RPC',
+    action: ErrorAction.FALLBACK_TO_TYPE2_LEGACY,
+    reason: 'Transaction type not supported by RPC',
         retryable: true,
-        maxRetries: 1, // Only try fallback once
-        backoffMs: 0 // Immediate fallback
+    maxRetries: 1,
+    backoffMs: 0
       }
     }
 
@@ -93,14 +101,14 @@ export class ErrorClassifier {
       }
     }
 
-    // RPC errors
-    if (code && code < 0 && code >= -39999) {
+    // Generic -32000 only if no message: do single short backoff
+    if (code === -32000 && !originalMessage) {
       return {
         action: ErrorAction.BACKOFF_RETRY,
-        reason: `RPC error ${code}`,
+        reason: 'RPC -32000 without message',
         retryable: true,
-        maxRetries: 2,
-        backoffMs: 1000
+        maxRetries: 1,
+        backoffMs: 500
       }
     }
 
@@ -135,24 +143,14 @@ export class ErrorClassifier {
         return await this.handleRefreshNonce(walletAddress || '', provider, signedTransaction)
 
       case ErrorAction.HARD_FAIL:
-        // For insufficient funds, include current balance in error message
-        if (classification.reason.includes('Insufficient funds')) {
-          try {
-            const balance = await provider.getBalance(walletAddress || '0x0000000000000000000000000000000000000000')
-            const balanceEth = parseFloat(ethers.formatEther(balance)).toFixed(6)
-            throw new Error(`HARD FAIL: ${classification.reason}. Current balance: ${balanceEth} ETH`)
-          } catch (balanceError) {
-            throw new Error(`HARD FAIL: ${classification.reason}. Could not fetch balance: ${balanceError}`)
-          }
-        }
+      case ErrorAction.HARD_FAIL_PROVIDER_BALANCE_FETCH:
+        // Don't fetch balance here; reason should already include details
         throw new Error(`HARD FAIL: ${classification.reason}`)
 
       case ErrorAction.BACKOFF_RETRY:
         if (retryCount < classification.maxRetries) {
           // Special handling for transaction type issues - create fallback transaction
-          if (classification.reason.includes('not supported')) {
-            return await this.handleFallbackTransaction(walletAddress || '', provider)
-          }
+          // No-op here; FALLBACK_TO_TYPE2_LEGACY handles type fallback explicitly
 
           console.log(`⏳ [ErrorClassifier] Backing off for ${classification.backoffMs}ms before retry ${retryCount + 1}/${classification.maxRetries}`)
           await this.delay(classification.backoffMs || 1000)
@@ -160,6 +158,9 @@ export class ErrorClassifier {
         } else {
           throw new Error(`MAX RETRIES EXCEEDED: ${classification.reason}`)
         }
+
+      case ErrorAction.FALLBACK_TO_TYPE2_LEGACY:
+        return await this.handleFallbackTransaction(walletAddress || '', provider, signedTransaction)
 
       default:
         throw new Error(`UNKNOWN ACTION: ${classification.action}`)
@@ -171,6 +172,7 @@ export class ErrorClassifier {
     try {
       const parsedTx = Transaction.from(signedTransaction)
       if (parsedTx.hash) {
+  console.log(`✅ [ErrorClassifier] accepted-known → tracking ${parsedTx.hash}`)
         return { txHash: parsedTx.hash, shouldRetry: false }
       } else {
         throw new Error('Could not extract transaction hash')
@@ -192,39 +194,32 @@ export class ErrorClassifier {
     console.log(`💰 [ErrorClassifier] Bumping fees for retry ${retryCount + 1}`)
 
     const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
-    const to = await wallet.getAddress()
-    const nonceManager = NonceManager.getInstance(provider)
+    const from = await wallet.getAddress()
 
-    // For fee bumps, we want to reuse the same nonce (assuming it's pending)
-    // But we need to get the current nonce from the transaction
-    let nonce: number
-    try {
-      const parsedTx = Transaction.from(signedTransaction)
-      nonce = Number(parsedTx.nonce)
-    } catch {
-      // Fallback to getting next nonce if parsing fails
-      nonce = await nonceManager.getNextNonce(to, provider)
-    }
+    // Reuse the same nonce and original call details
+    const parsedTx = Transaction.from(signedTransaction)
+    const nonce = BigInt(parsedTx.nonce)
+    const gasLimit = BigInt(parsedTx.gasLimit)
+    const to = parsedTx.to || from
+    const value = BigInt(parsedTx.value || 0)
+    const data = parsedTx.data
 
     const currentFees = await BumpPolicy.getInitialFees(provider, 1)
-    const bumpedFees = BumpPolicy.bumpFees(currentFees.maxFeePerGas, currentFees.maxPriorityFeePerGas, retryCount)
+    const { bumpFees } = await import('./TxBuilder')
+    const bumped = bumpFees(currentFees.maxFeePerGas, currentFees.maxPriorityFeePerGas)
 
-    if (!bumpedFees) {
-      throw new Error('Maximum fee bumps reached')
-    }
-
-    const replacementTx = {
+    const { buildAndSignEip1559Tx } = await import('./TxBuilder')
+    const newSignedTx = await buildAndSignEip1559Tx(wallet, {
+      chainId: BigInt(ENV.CHAIN_ID),
+      from,
       to,
-      value: 0n,
       nonce,
-      maxFeePerGas: bumpedFees.maxFeePerGas,
-      maxPriorityFeePerGas: bumpedFees.maxPriorityFeePerGas,
-      gasLimit: 21000n,
-      chainId: ENV.CHAIN_ID,
-      type: 2
-    } as const
-
-    const newSignedTx = await wallet.signTransaction(replacementTx)
+      gasLimit,
+      maxFeePerGas: bumped.maxFee,
+      maxPriorityFeePerGas: bumped.maxPrio,
+      value,
+      data
+    })
     return { shouldRetry: true, newSignedTx }
   }
 
@@ -239,39 +234,35 @@ export class ErrorClassifier {
 
     console.log('🔄 [ErrorClassifier] Refreshing nonce and rescheduling transaction')
 
-    const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
-    const nonceManager = NonceManager.getInstance(provider)
+  const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
+  const nonceManager = NonceManager.getInstance(provider)
+  // Refresh from chain cache to keep state up to date, but do NOT reserve a new nonce here
+  await nonceManager.refreshFromChain(walletAddress)
 
-    // Force refresh the nonce by clearing cache for this address
-    const freshNonce = await provider.getTransactionCount(walletAddress, 'pending')
-    ;(nonceManager as any).nextNonce.set(walletAddress.toLowerCase(), freshNonce)
-
-    // Get the next nonce (which should now be fresh)
-    const nonce = await nonceManager.getNextNonce(walletAddress, provider)
-
-    // Parse original transaction to get other details
+  // Parse original transaction and reuse the same lease nonce
     const parsedTx = Transaction.from(signedTransaction)
+  const nonce = BigInt(parsedTx.nonce)
     const currentFees = await BumpPolicy.getInitialFees(provider, 1)
 
-    const refreshedTx = {
-      to: parsedTx.to,
-      value: parsedTx.value,
+    const { buildAndSignEip1559Tx } = await import('./TxBuilder')
+    const newSignedTx = await buildAndSignEip1559Tx(wallet, {
+      chainId: BigInt(ENV.CHAIN_ID),
+      from: walletAddress,
+      to: parsedTx.to || walletAddress,
       nonce,
+      gasLimit: BigInt(parsedTx.gasLimit),
       maxFeePerGas: currentFees.maxFeePerGas,
       maxPriorityFeePerGas: currentFees.maxPriorityFeePerGas,
-      gasLimit: parsedTx.gasLimit,
-      chainId: ENV.CHAIN_ID,
-      type: 2,
+      value: BigInt(parsedTx.value || 0),
       data: parsedTx.data
-    } as const
-
-    const newSignedTx = await wallet.signTransaction(refreshedTx)
+    })
     return { shouldRetry: true, newSignedTx }
   }
 
   private static async handleFallbackTransaction(
     walletAddress: string,
-    provider: JsonRpcProvider
+    provider: JsonRpcProvider,
+    signedTransaction?: string
   ): Promise<{ shouldRetry: boolean; newSignedTx: string }> {
     if (!ENV.PUBLIC_SUBMIT_PRIVATE_KEY) {
       throw new Error('Cannot create fallback transaction: no PUBLIC_SUBMIT_PRIVATE_KEY available')
@@ -281,21 +272,28 @@ export class ErrorClassifier {
 
     const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
     const nonceManager = NonceManager.getInstance(provider)
-    const nonce = await nonceManager.getNextNonce(walletAddress, provider)
+    let leaseNonce: bigint | undefined
+    // If we can parse the original signed tx, reuse its nonce; avoid taking a new lease
+    if (signedTransaction) {
+      try { const parsed = Transaction.from(signedTransaction); leaseNonce = BigInt(parsed.nonce) } catch {}
+    }
+    const nonce = leaseNonce !== undefined ? leaseNonce : await nonceManager.reserveNonce(walletAddress, provider)
     const { maxFeePerGas, maxPriorityFeePerGas } = await BumpPolicy.getInitialFees(provider, 1)
 
-    const fallbackTx = {
-      to: walletAddress, // Send to self
-      value: 0n,
-      nonce,
+    // Prefer type-2; only legacy attempted elsewhere if strictly required
+    const { buildAndSignEip1559Tx } = await import('./TxBuilder')
+    const newSignedTx = await buildAndSignEip1559Tx(wallet, {
+      chainId: BigInt(ENV.CHAIN_ID),
+      from: walletAddress,
+      to: walletAddress,
+  nonce: BigInt(nonce),
+      gasLimit: 21000n,
       maxFeePerGas,
       maxPriorityFeePerGas,
-      gasLimit: 21000n,
-      chainId: ENV.CHAIN_ID,
-      type: 2
-    } as const
+      value: 0n,
+      data: '0x'
+    })
 
-    const newSignedTx = await wallet.signTransaction(fallbackTx)
     return { shouldRetry: true, newSignedTx }
   }
 

@@ -1,4 +1,4 @@
-import { Wallet, JsonRpcProvider, Transaction } from 'ethers'
+import { Wallet, JsonRpcProvider, Transaction, keccak256 } from 'ethers'
 import { ENV } from '../config'
 import FlashbotsClient from './FlashbotsClient'
 import BloxrouteClient from './BloxrouteClient'
@@ -6,7 +6,8 @@ import PublicSubmitter from './PublicSubmitter'
 import ReceiptChecker from './ReceiptChecker'
 import NonceManager from './NonceManager'
 import BumpPolicy from './BumpPolicy'
-import ErrorClassifier from './ErrorClassifier'
+import ErrorClassifier, { ErrorAction } from './ErrorClassifier'
+import { buildAndSignEip1559Tx, bumpFees, requiredCostWei } from './TxBuilder'
 import crypto from 'crypto'
 
 // 🚨 MOCK MODE DETECTION - VERY EXPLICIT 🚨
@@ -60,6 +61,10 @@ console.log(`🔗 [BundleSubmitter] Relay Configuration:`, {
   mockMode: MOCK,
   network: ENV.SEPOLIA_SWITCH ? 'Sepolia Testnet' : 'Mainnet'
 })
+
+if (CURRENT_CHAIN !== 1) {
+  console.log('[BundleSubmitter] Type gating: non-mainnet detected; will prefer EIP-1559 type-2 only. Legacy only if RPC explicitly rejects type-2.')
+}
 
 AVAILABLE_RELAYS.forEach(relay => {
   console.log(`  📡 ${relay.name}: ${relay.url} (chainId: ${relay.chainId})`)
@@ -362,6 +367,24 @@ export class BundleSubmitter {
 
       console.log('🌐 [BundleSubmitter] Submitting signed transaction to public mempool...')
 
+      // Log transaction details before submission
+      try {
+        const parsedTx = Transaction.from(signedTransaction)
+        console.log(`[BundleSubmitter] Pre-submission details:`, {
+          from: parsedTx.from,
+          nonce: Number(parsedTx.nonce),
+          type: parsedTx.type,
+          gasLimit: String(parsedTx.gasLimit),
+          maxFeePerGas: String(parsedTx.maxFeePerGas),
+          maxPriorityFeePerGas: String(parsedTx.maxPriorityFeePerGas),
+          value: String(parsedTx.value),
+          chainId: String(parsedTx.chainId || ENV.CHAIN_ID),
+          txHash: parsedTx.hash
+        })
+      } catch (parseError: any) {
+        console.warn('[BundleSubmitter] Could not parse transaction for logging:', parseError?.message || String(parseError))
+      }
+
       // Basic sanity on the signed tx; if invalid but we have a fallback key, skip straight to fallback path
       const looksLikeRaw = /^0x[0-9a-fA-F]+$/.test(signedTransaction) && signedTransaction.length > 10
 
@@ -370,13 +393,60 @@ export class BundleSubmitter {
       let retryCount = 0
       const maxRetries = 5 // Allow more retries for different error types
 
-      while (retryCount <= maxRetries) {
+      // Before any send, do a funds check using parsed tx fields
+      let parsedForFunds: Transaction | undefined
+      try { parsedForFunds = Transaction.from(signedTransaction) } catch {}
+      if (parsedForFunds?.from) {
+        try {
+          const balance = await provider.getBalance(parsedForFunds.from)
+          const gasLimit = BigInt(parsedForFunds.gasLimit)
+          const maxFeePerGas = BigInt(parsedForFunds.maxFeePerGas || 0n)
+          const value = BigInt(parsedForFunds.value || 0n)
+          const required = requiredCostWei(gasLimit, maxFeePerGas, value)
+          if (balance < required) {
+            console.error('[BundleSubmitter] Insufficient funds', {
+              from: parsedForFunds.from,
+              balanceWei: balance.toString(),
+              requiredWei: required.toString(),
+              gasLimit: gasLimit.toString(),
+              maxFeePerGas: maxFeePerGas.toString(),
+              maxPriorityFeePerGas: String(parsedForFunds.maxPriorityFeePerGas || 0n),
+              value: value.toString(),
+              balanceEth: (Number(balance) / 1e18).toString(),
+              requiredEth: (Number(required) / 1e18).toString()
+            })
+            // Classify and hard-fail via ErrorClassifier
+            await ErrorClassifier.executeAction(
+              { action: ErrorAction.HARD_FAIL, reason: `Insufficient funds: balance=${balance} wei required=${required} wei`, retryable: false, maxRetries: 0 },
+              signedTransaction,
+              provider,
+              retryCount,
+              parsedForFunds.from
+            )
+          }
+        } catch (balErr: any) {
+          console.error('[BundleSubmitter] Balance fetch failed', { from: parsedForFunds.from, error: balErr?.message || String(balErr) })
+          await ErrorClassifier.executeAction(
+            { action: ErrorAction.HARD_FAIL_PROVIDER_BALANCE_FETCH, reason: balErr?.message || String(balErr), retryable: false, maxRetries: 0 },
+            signedTransaction,
+            provider,
+            retryCount,
+            parsedForFunds.from
+          )
+        }
+      }
+
+  while (retryCount <= maxRetries) {
         try {
           if (!looksLikeRaw) throw new Error('invalid-raw-tx')
           txHash = await provider.send('eth_sendRawTransaction', [signedTransaction])
           break // Success, exit loop
         } catch (err: any) {
           const classification = ErrorClassifier.classifyError(err)
+          if (err?.code === -32000 || err?.error?.code === -32000) {
+            const msg = err?.error?.message || err?.error?.data?.message || err?.message || ''
+            console.log(`🔍 [BundleSubmitter] -32000: ${msg}`)
+          }
           console.log(`🔍 [BundleSubmitter] Classified error: ${classification.action} - ${classification.reason}`)
 
           try {
@@ -398,6 +468,23 @@ export class BundleSubmitter {
 
             if (actionResult.newSignedTx) {
               signedTransaction = actionResult.newSignedTx
+              // Pre-log tx details for visibility before next send
+              try {
+                const parsed = Transaction.from(signedTransaction)
+                const from = walletAddress || 'unknown'
+                const info = {
+                  from,
+                  nonce: String(parsed.nonce),
+                  type: parsed.type,
+                  gasLimit: String(parsed.gasLimit),
+                  maxFeePerGas: String(parsed.maxFeePerGas),
+                  maxPriorityFeePerGas: String(parsed.maxPriorityFeePerGas),
+                  value: String(parsed.value),
+                  chainId: String(parsed.chainId || ENV.CHAIN_ID),
+                  txHash: parsed.hash || keccak256(signedTransaction as any)
+                }
+                console.log('[BundleSubmitter] Resubmission with bumped fees', info)
+              } catch {}
             }
 
             if (!actionResult.shouldRetry) {
@@ -421,9 +508,20 @@ export class BundleSubmitter {
         }
       }
 
-      if (!txHash) {
+  if (!txHash) {
         throw new Error('Failed to submit transaction after all retry attempts')
-      }      console.log('✅ [BundleSubmitter] Public transaction submitted successfully!', {
+      }
+
+      // Mark broadcast on the current lease if possible
+      try {
+        const parsed = Transaction.from(signedTransaction)
+        if (parsed.from && parsed.nonce !== undefined && txHash) {
+          const nm = NonceManager.getInstance(provider)
+          nm.markBroadcast(parsed.from, BigInt(parsed.nonce), txHash)
+        }
+      } catch {}
+
+      console.log('✅ [BundleSubmitter] Public transaction submitted successfully!', {
         hash: txHash,
         mode: 'PUBLIC_MEMPOOL'
       })

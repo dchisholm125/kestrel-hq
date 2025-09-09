@@ -78,7 +78,7 @@ export class BundleSigner {
 
   // Managed nonce via NonceManager
   const nonceManager = NonceManager.getInstance(this.provider)
-  const nonce = await nonceManager.getNextNonce(this.wallet.address, this.provider)
+  const nonce = await nonceManager.reserveNonce(this.wallet.address, this.provider)
   console.log(`[BundleSigner] Using managed nonce ${nonce} for ${this.wallet.address}`)
 
     // Get EIP-1559 fees using BumpPolicy
@@ -92,8 +92,8 @@ export class BundleSigner {
       gasLimit,
       maxFeePerGas,
       maxPriorityFeePerGas,
-      nonce,
-      value: 0, // No ETH being sent directly
+      nonce: Number(nonce),
+      value: 0n, // No ETH being sent directly
       type: 2, // EIP-1559 Type-2 transaction
       chainId
     }
