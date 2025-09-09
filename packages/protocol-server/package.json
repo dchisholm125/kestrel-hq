@@ -7,7 +7,7 @@
   "main": "dist/protocol-server/src/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start:protocol": "npx tsx src/index.ts",
+    "start:protocol": "KESTREL_PRIVATE_PLUGINS=1 npx tsx src/index.ts",
     "test": "jest --passWithNoTests --config=jest.config.js",
     "test:unit": "jest --testPathPattern=\"__tests__|test/unit\" --runInBand",
     "test:fsm": "jest --testPathPattern=\"test/unit/(statemachine|intentfsm)\\.test\\.ts\" --runInBand",
