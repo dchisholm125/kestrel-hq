@@ -313,6 +313,31 @@ export class BundleSubmitter {
 
     console.log(`[BundleSubmitter] 🚀 Submitting bundle to ${tasks.length} relay(s)...`)
 
+    // Pre-bundle telemetry
+    try {
+      const parsed = Transaction.from(signedTransaction)
+      console.log(`[BundleSubmitter] Pre-bundle telemetry:`, {
+        from: parsed.from,
+        nonce: parsed.nonce.toString(),
+        type: parsed.type,
+        gasLimit: parsed.gasLimit.toString(),
+        maxFeePerGas: parsed.maxFeePerGas?.toString() || '0',
+        maxPriorityFeePerGas: parsed.maxPriorityFeePerGas?.toString() || '0',
+        valueWei: parsed.value?.toString() || '0',
+        valueEth: (Number(parsed.value || 0n) / 1e18).toString(),
+        tokenIn: 'unknown', // Upstream signed tx
+        tokenOut: 'unknown',
+        amountInWei: parsed.value?.toString() || '0',
+        requiredCostWei: 'unknown', // No funds check here
+        balanceWei: 'unknown',
+        classification: 'ok', // Assuming upstream checked
+        chainId: parsed.chainId?.toString() || ENV.CHAIN_ID.toString(),
+        txHash: parsed.hash
+      })
+    } catch (e) {
+      console.warn('[BundleSubmitter] Could not parse for telemetry:', e)
+    }
+
     // Submit to all relays in parallel using Promise.allSettled
     const results = await Promise.allSettled(tasks.map(t => t.promise))
     let bundleHash: string | undefined
@@ -382,15 +407,22 @@ export class BundleSubmitter {
       // Log transaction details before submission
       try {
         const parsedTx = Transaction.from(signedTransaction)
-        console.log(`[BundleSubmitter] Pre-submission details:`, {
+        console.log(`[BundleSubmitter] Pre-submission telemetry:`, {
           from: parsedTx.from,
-          nonce: Number(parsedTx.nonce),
+          nonce: parsedTx.nonce.toString(),
           type: parsedTx.type,
-          gasLimit: String(parsedTx.gasLimit),
-          maxFeePerGas: String(parsedTx.maxFeePerGas),
-          maxPriorityFeePerGas: String(parsedTx.maxPriorityFeePerGas),
-          value: String(parsedTx.value),
-          chainId: String(parsedTx.chainId || ENV.CHAIN_ID),
+          gasLimit: parsedTx.gasLimit.toString(),
+          maxFeePerGas: parsedTx.maxFeePerGas?.toString() || '0',
+          maxPriorityFeePerGas: parsedTx.maxPriorityFeePerGas?.toString() || '0',
+          valueWei: parsedTx.value?.toString() || '0',
+          valueEth: (Number(parsedTx.value || 0n) / 1e18).toString(),
+          tokenIn: 'ETH', // Assuming ETH for testnet submissions
+          tokenOut: 'ETH',
+          amountInWei: parsedTx.value?.toString() || '0',
+          requiredCostWei: 'unknown', // Funds check done upstream in submitPath
+          balanceWei: 'unknown', // Funds check done upstream in submitPath
+          classification: 'ok', // Reached here means funds ok
+          chainId: parsedTx.chainId?.toString() || ENV.CHAIN_ID.toString(),
           txHash: parsedTx.hash
         })
       } catch (parseError: any) {

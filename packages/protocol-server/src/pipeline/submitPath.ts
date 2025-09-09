@@ -145,18 +145,22 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
 
       // Pre-send log dump for debugging
       console.log('[submitPath] Pre-send transaction details:', {
-        derivedAmountInWei: parsedTx.value?.toString() || '0',
-        txValue: parsedTx.value?.toString() || '0',
+        from: parsedTx.from,
+        nonce: parsedTx.nonce.toString(),
+        type: parsedTx.type,
         gasLimit: parsedTx.gasLimit.toString(),
         maxFeePerGas: parsedTx.maxFeePerGas?.toString() || '0',
         maxPriorityFeePerGas: parsedTx.maxPriorityFeePerGas?.toString() || '0',
-        from: parsedTx.from,
-        to: parsedTx.to,
-        dataLength: parsedTx.data.length,
-        nonce: parsedTx.nonce.toString(),
-        chainId: parsedTx.chainId?.toString() || ENV.CHAIN_ID.toString(),
+        valueWei: parsedTx.value?.toString() || '0',
+        valueEth: (Number(parsedTx.value || 0n) / 1e18).toString(),
+        tokenIn: 'ETH', // Self-transfer or flash loan
+        tokenOut: 'ETH',
+        amountInWei: parsedTx.value?.toString() || '0',
+        requiredCostWei: required.toString(),
         balanceWei: balance.toString(),
-        requiredWei: required.toString()
+        classification: balance >= required ? 'ok' : 'hard_fail_insufficient_funds',
+        chainId: parsedTx.chainId?.toString() || ENV.CHAIN_ID.toString(),
+        txHash: parsedTx.hash
       })
 
       console.log(`[submitPath] Built testnet transaction: nonce=${nonce}, from=${from}`)
