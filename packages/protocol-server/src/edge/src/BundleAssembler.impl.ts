@@ -6,9 +6,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-
-// NOTE: Replace these with real imports from @kestrel-hq/protocol-sdk when available
-// import type { BundleAssembler } from '@kestrel-hq/protocol-sdk/edge/interfaces/BundleAssembler';
+import { logBundle } from './index.js';
 
 type TxTemplate = {
   kind: 'buy' | 'sell' | 'settle' | string;
@@ -133,8 +131,7 @@ export class BundleAssemblerImpl {
     };
 
     // Observability: console summary
-    console.info('[edge][BundleAssembler] plan', {
-      intentId: intent.id,
+    logBundle('📋 PLAN CREATED', intent.id, {
       corrId: intent.corrId,
       txs: txTemplates.length,
       atomic,

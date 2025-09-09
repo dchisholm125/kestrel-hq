@@ -7,7 +7,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-// Health snapshot is provided in the lane objects (healthy flag). Router will exclude degraded lanes by default.
+import { logBundle } from './index.js';
 
 type BundlePlan = {
   atomic: boolean;
@@ -106,7 +106,7 @@ export class RelayRouterImpl {
     const plan: RelayPlan = { targets, strategy, backoff, jitter };
 
     // Observability: console summary
-    console.info('[edge][RelayRouter] plan', {
+    logBundle('🎯 ROUTE PLANNED', 'relay-plan', {
       targets,
       strategy,
       attempts,

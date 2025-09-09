@@ -42,7 +42,54 @@ import { advanceIntent } from './fsm/transitionExecutor'
 import { getEdgeModules } from './edge/loader'
 import { submitPath } from './pipeline/submitPath'
 
-// prefer the modular HTTP router when available
+// Colorful logging utilities
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  bgRed: '\x1b[41m',
+  bgGreen: '\x1b[42m',
+  bgYellow: '\x1b[43m',
+  bgBlue: '\x1b[44m',
+  bgMagenta: '\x1b[45m',
+  bgCyan: '\x1b[46m'
+}
+
+function logIntent(label: string, intentId: string, corrId: string, details?: any) {
+  const timestamp = new Date().toISOString().slice(11, 23) // HH:MM:SS.mmm
+  console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bright}${colors.blue}📋 INTENT${colors.reset} ${label} ${colors.yellow}${intentId.slice(0, 8)}...${colors.reset} ${colors.magenta}${corrId.slice(0, 12)}...${colors.reset}${details ? ' ' + JSON.stringify(details) : ''}`)
+}
+
+function logStage(stage: string, intentId: string, status: 'START' | 'PASS' | 'FAIL', details?: any) {
+  const timestamp = new Date().toISOString().slice(11, 23)
+  const color = status === 'PASS' ? colors.green : status === 'FAIL' ? colors.red : colors.yellow
+  const icon = status === 'PASS' ? '✅' : status === 'FAIL' ? '❌' : '▶️'
+  console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bright}${color}🔄 ${stage.toUpperCase()}${colors.reset} ${icon} ${colors.yellow}${intentId.slice(0, 8)}...${colors.reset}${details ? ' ' + JSON.stringify(details) : ''}`)
+}
+
+function logBundle(label: string, bundleId: string, details?: any) {
+  const timestamp = new Date().toISOString().slice(11, 23)
+  console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bright}${colors.magenta}📦 BUNDLE${colors.reset} ${label} ${colors.green}${bundleId.slice(0, 8)}...${colors.reset}${details ? ' ' + JSON.stringify(details) : ''}`)
+}
+
+function logFlashbots(label: string, txHash: string, status: string, details?: any) {
+  const timestamp = new Date().toISOString().slice(11, 23)
+  const color = status.includes('success') || status.includes('accepted') ? colors.green : status.includes('fail') || status.includes('reject') ? colors.red : colors.yellow
+  const icon = status.includes('success') || status.includes('accepted') ? '🚀' : status.includes('fail') || status.includes('reject') ? '💥' : '⚡'
+  console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bright}${color}⚡ FLASHBOTS${colors.reset} ${icon} ${label} ${colors.cyan}${txHash.slice(0, 10)}...${colors.reset} ${status}${details ? ' ' + JSON.stringify(details) : ''}`)
+}
+
+function logServer(label: string, details?: any) {
+  const timestamp = new Date().toISOString().slice(11, 23)
+  console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bright}${colors.white}🌐 SERVER${colors.reset} ${label}${details ? ' ' + JSON.stringify(details) : ''}`)
+}
+
 let app: Express
 const port = ENV.API_SERVER_PORT || ENV.PORT || 3000
 try {
@@ -54,10 +101,12 @@ try {
 }
 
 app.get('/health', (_req: Request, res: Response) => {
+  logServer('🏥 HEALTH CHECK', { status: 'OK' })
   res.status(200).json({ status: 'OK' })
 })
 
 app.get('/', (req: Request, res: Response) => {
+  logServer('🏠 ROOT ACCESS', { ip: req.ip })
   res.send('Hello, Kestrel Protocol!')
 })
 
@@ -439,12 +488,15 @@ app.post('/intent', async (req: Request, res: Response) => {
   if (!body.intent_id) {
     const reason = getReason('CLIENT_BAD_REQUEST')
     const envelope: ErrorEnvelope = { corr_id: `corr_missing_${Date.now()}`, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+    logIntent('❌ MISSING INTENT_ID', 'unknown', envelope.corr_id, { body })
     return res.status(reason.http_status).json(envelope)
   }
 
   const intent_id = body.intent_id
   const correlation_id = `corr_${ulid()}`
   const request_hash = intentStore.computeHash(body)
+
+  logIntent('📥 RECEIVED', intent_id, correlation_id, { hash: request_hash.slice(0, 8) })
 
   const row = {
     intent_id,
@@ -463,15 +515,18 @@ app.post('/intent', async (req: Request, res: Response) => {
     const incomingCanonical = intentStore.computeHash(body)
     const storedCanonical = intentStore.computeHash(storedPayload)
     if (incomingCanonical === storedCanonical) {
+      logIntent('♻️ IDEMPOTENT', intent_id, correlation_id, { state: recent.state, hash: request_hash.slice(0, 8) })
       return res.status(200).json({ intent_id: recent.intent_id, state: recent.state, request_hash: recent.request_hash, correlation_id: recent.correlation_id })
     }
     // same hash but different body (hash collision or replay) — mark as replay seen
     const reason = getReason('SCREEN_REPLAY_SEEN')
     const envelope = { corr_id: recent.correlation_id, request_hash: recent.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+    logIntent('🚨 REPLAY DETECTED', intent_id, correlation_id, { hash: request_hash.slice(0, 8) })
     return res.status(reason.http_status).json(envelope)
   }
 
   intentStore.put(row)
+  logIntent('💾 STORED', intent_id, correlation_id, { state: IntentState.RECEIVED })
 
   // pipeline context
   const edge = await getEdgeModules()
@@ -491,11 +546,14 @@ app.post('/intent', async (req: Request, res: Response) => {
   try {
     // run stages synchronously; on any REJECTED, return error envelope
     try {
+      logStage('screen', intent_id, 'START')
       const r = await screenIntent(ctxBase)
-  if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+      if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+      logStage('screen', intent_id, 'PASS', { next: r?.next })
     } catch (e) {
       if (e instanceof ReasonedRejection) {
-  await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+        logStage('screen', intent_id, 'FAIL', { reason: e.reason.code })
+        await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
         await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'screen', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
       } else { throw e }
     }
@@ -504,15 +562,19 @@ app.post('/intent', async (req: Request, res: Response) => {
     if (updated.state === IntentState.REJECTED) {
       const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
       const envelope: ErrorEnvelope = { corr_id: updated.correlation_id, request_hash: updated.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      logIntent('❌ REJECTED', intent_id, correlation_id, { stage: 'screen', reason: reason.code })
       return res.status(reason.http_status).json(envelope)
     }
 
     try {
+      logStage('validate', intent_id, 'START')
       const r = await validateIntent(ctxBase)
-  if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+      if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+      logStage('validate', intent_id, 'PASS', { next: r?.next })
     } catch (e) {
       if (e instanceof ReasonedRejection) {
-  await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+        logStage('validate', intent_id, 'FAIL', { reason: e.reason.code })
+        await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
         await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'validate', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
       } else { throw e }
     }
@@ -524,11 +586,14 @@ app.post('/intent', async (req: Request, res: Response) => {
     }
 
     try {
+      logStage('enrich', intent_id, 'START')
       const r = await enrichIntent(ctxBase)
-  if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+      if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+      logStage('enrich', intent_id, 'PASS', { next: r?.next })
     } catch (e) {
       if (e instanceof ReasonedRejection) {
-  await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+        logStage('enrich', intent_id, 'FAIL', { reason: e.reason.code })
+        await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
         await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'enrich', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
       } else { throw e }
     }
@@ -536,15 +601,19 @@ app.post('/intent', async (req: Request, res: Response) => {
     if (updated?.state === IntentState.REJECTED) {
       const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
       const envelope: ErrorEnvelope = { corr_id: updated.correlation_id, request_hash: updated.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      logIntent('❌ REJECTED', intent_id, correlation_id, { stage: 'enrich', reason: reason.code })
       return res.status(reason.http_status).json(envelope)
     }
 
     try {
+      logStage('policy', intent_id, 'START')
       const r = await policyIntent(ctxBase)
-  if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+      if (r?.next) await advanceIntent({ intentId: intent_id, to: r.next, corr_id: correlation_id, request_hash })
+      logStage('policy', intent_id, 'PASS', { next: r?.next })
     } catch (e) {
       if (e instanceof ReasonedRejection) {
-  await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
+        logStage('policy', intent_id, 'FAIL', { reason: e.reason.code })
+        await advanceIntent({ intentId: intent_id, to: IntentState.REJECTED, corr_id: correlation_id, request_hash, reason: e.reason })
         await appendRejection({ ts: new Date().toISOString(), corr_id: correlation_id, intent_id, stage: 'policy', reason: { code: e.reason.code, category: e.reason.category, http_status: e.reason.http_status, message: e.reason.message }, context: e.reason.context })
       } else { throw e }
     }
@@ -552,25 +621,32 @@ app.post('/intent', async (req: Request, res: Response) => {
     if (updated?.state === IntentState.REJECTED) {
       const reason = getReason(updated.reason_code as any) || getReason('INTERNAL_ERROR')
       const envelope: ErrorEnvelope = { corr_id: updated.correlation_id, request_hash: updated.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+      logIntent('❌ REJECTED', intent_id, correlation_id, { stage: 'policy', reason: reason.code })
       return res.status(reason.http_status).json(envelope)
     }
 
     // Post-QUEUED submission path: run the public-build guard, but do not advance state beyond QUEUED here.
     try {
+      logIntent('🚀 SUBMIT PATH', intent_id, correlation_id, { stage: 'submission' })
       await submitPath({ edge, intent: { intent_id }, corr_id: correlation_id, request_hash })
+      logIntent('✅ SUBMIT COMPLETE', intent_id, correlation_id)
     } catch (e) {
       if (e instanceof ReasonedRejection && e.reason.code === 'SUBMIT_NOT_ATTEMPTED') {
+        logIntent('⏸️ SUBMIT SKIPPED', intent_id, correlation_id, { reason: 'not_attempted' })
         // Do not advance state; just acknowledge QUEUED (deterministic, side-effect-free public build)
       } else {
+        logIntent('❌ SUBMIT ERROR', intent_id, correlation_id, { error: e instanceof Error ? e.message : String(e) })
         throw e
       }
     }
 
   // success: return current state (public build remains at QUEUED)
     const final = intentStore.getById(intent_id)
+    logIntent('📤 RESPONSE', intent_id, correlation_id, { state: final?.state, status: 201 })
     return res.status(201).json({ intent_id, state: final?.state ?? IntentState.RECEIVED })
   } catch (e) {
     // unexpected error: mark REJECTED and return INTERNAL_ERROR
+    logIntent('💥 UNEXPECTED ERROR', intent_id, correlation_id, { error: e instanceof Error ? e.message : String(e) })
     const stored = intentStore.getById(intent_id)
     if (stored) {
       stored.state = IntentState.REJECTED
@@ -579,6 +655,7 @@ app.post('/intent', async (req: Request, res: Response) => {
     }
     const reason = getReason('INTERNAL_ERROR')
     const envelope: ErrorEnvelope = { corr_id: stored?.correlation_id ?? `corr_${ulid()}`, request_hash: stored?.request_hash, state: IntentState.REJECTED, reason, ts: new Date().toISOString() }
+    logIntent('📤 ERROR RESPONSE', intent_id, correlation_id, { status: reason.http_status, reason: reason.code })
     return res.status(reason.http_status).json(envelope)
   }
 })
@@ -633,6 +710,7 @@ app.get('/metrics', async (_req: Request, res: Response) => {
 const isDirectRun = typeof require !== 'undefined' && (require as any).main === module
 if (isDirectRun) {
   app.listen(port, () => {
+    logServer('🚀 SERVER STARTED', { port, mode: ENV.NODE_ENV || 'development', privatePlugins: process.env.KESTREL_PRIVATE_PLUGINS === '1' })
     console.log(`Server running on port ${port}`)
   })
 }

@@ -7,8 +7,8 @@
   "main": "dist/protocol-server/src/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/protocol-server/src/index.js",
-  "test": "jest --passWithNoTests --config=jest.config.js",
+    "start:protocol": "npx tsx src/index.ts",
+    "test": "jest --passWithNoTests --config=jest.config.js",
     "test:unit": "jest --testPathPattern=\"__tests__|test/unit\" --runInBand",
     "test:fsm": "jest --testPathPattern=\"test/unit/(statemachine|intentfsm)\\.test\\.ts\" --runInBand",
     "test:stages": "jest --testPathPattern=\"test/unit/stages\\.test\\.ts\" --runInBand",
