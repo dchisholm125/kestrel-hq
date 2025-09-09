@@ -31,6 +31,19 @@ for (const p of candidateEnvPaths) {
   }
 }
 
+// Load private environment variables from kestrel-protocol-private
+const privateEnvPath = '/home/ubuntu/Kestrel-root/kestrel-protocol-private/.env.kestrel-protocol-private';
+if (fs.existsSync(privateEnvPath)) {
+  dotenv.config({ path: privateEnvPath });
+}
+
+// Set derived env vars from private keys
+if (process.env.SIGNER_PK) {
+  const pk = process.env.SIGNER_PK.startsWith('0x') ? process.env.SIGNER_PK : '0x' + process.env.SIGNER_PK;
+  process.env.PUBLIC_SUBMIT_PRIVATE_KEY_SEPOLIA = pk;
+  process.env.PUBLIC_SUBMIT_PRIVATE_KEY = pk;
+}
+
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT ? Number(process.env.PORT) : 3000,

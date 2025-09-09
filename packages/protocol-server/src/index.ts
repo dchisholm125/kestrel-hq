@@ -41,6 +41,7 @@ import { appendRejection } from './utils/rejectionAudit'
 import { advanceIntent } from './fsm/transitionExecutor'
 import { getEdgeModules } from './edge/loader'
 import { submitPath } from './pipeline/submitPath'
+import { Wallet, JsonRpcProvider, parseEther, formatEther } from 'ethers'
 import ReceiptChecker from './services/ReceiptChecker'
 
 // Colorful logging utilities
@@ -712,6 +713,36 @@ const isDirectRun = typeof require !== 'undefined' && (require as any).main === 
 if (isDirectRun) {
   // Initialize and start server
   const startServer = async () => {
+    // Wallet funding check before starting
+    const privateKey = process.env.PUBLIC_SUBMIT_PRIVATE_KEY_SEPOLIA || process.env.PUBLIC_SUBMIT_PRIVATE_KEY
+    if (!privateKey) {
+      console.error('❌ WALLET CHECK FAILED: No PUBLIC_SUBMIT_PRIVATE_KEY_SEPOLIA or PUBLIC_SUBMIT_PRIVATE_KEY found. Please set the private key in the environment.')
+      process.exit(1)
+    }
+
+    try {
+      const provider = new JsonRpcProvider(ENV.RPC_URL)
+      const wallet = new Wallet(privateKey).connect(provider)
+      const balance = await provider.getBalance(wallet.address)
+      const minBalance = parseEther('0.01') // Require at least 0.01 ETH for gas
+
+      if (balance < minBalance) {
+        console.error('❌ WALLET CHECK FAILED: Insufficient funds in wallet for gas.')
+        console.error(`   Wallet Address: ${wallet.address}`)
+        console.error(`   Current Balance: ${parseFloat(formatEther(balance)).toFixed(10)} ETH`)
+        console.error(`   Minimum Required: ${minBalance.toString()} wei (0.01 ETH)`)
+        console.error('   Please fund the wallet and restart the server.')
+        process.exit(1)
+      }
+
+      console.log('✅ WALLET CHECK PASSED: Sufficient funds detected.')
+      console.log(`   Wallet Address: ${wallet.address}`)
+      console.log(`   Balance: ${parseFloat(formatEther(balance)).toFixed(10)} ETH`)
+    } catch (error) {
+      console.error('❌ WALLET CHECK FAILED: Error checking wallet balance.', error)
+      process.exit(1)
+    }
+
     // Initialize ReceiptChecker for bundle status tracking
     const receiptChecker = new ReceiptChecker()
     await receiptChecker.initialize()

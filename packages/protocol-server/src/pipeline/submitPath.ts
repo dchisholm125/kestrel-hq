@@ -52,6 +52,19 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
     let mockBundleHash: string | undefined
 
     // On Sepolia, construct a minimal valid legacy tx and sign it with PUBLIC_SUBMIT_PRIVATE_KEY
+    
+
+
+/* COMMENTED OUT TEST SUCCESSFUL TX */
+/* COMMENTED OUT TEST SUCCESSFUL TX */
+/* COMMENTED OUT TEST SUCCESSFUL TX */
+/* COMMENTED OUT TEST SUCCESSFUL TX */
+
+
+
+    
+    // COMMENTED OUT: Self-test transaction (0 ETH to self) - successful on Sepolia: https://sepolia.etherscan.io/tx/0xc9753a68ed7b03e4fd5edb095bb16d95cf7e2ca0260ab25189ede0b9688bf70b
+    /*
     if (ENV.SEPOLIA_SWITCH) {
       if (!ENV.PUBLIC_SUBMIT_PRIVATE_KEY) {
         throw new ReasonedRejection(
@@ -64,8 +77,8 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
       const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
       const to = await wallet.getAddress()
       const nonce = await provider.getTransactionCount(to, 'latest')
-  const fee = await provider.getFeeData()
-  const gasPrice = fee.gasPrice ?? 1_500_000_000n // 1.5 gwei fallback
+      const fee = await provider.getFeeData()
+      const gasPrice = fee.gasPrice ?? 1_500_000_000n // 1.5 gwei fallback
       const legacyTx = {
         to,
         value: 0n,
@@ -76,14 +89,25 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
       } as const
       signedTx = await wallet.signTransaction(legacyTx)
     } else {
+    */
+
+/* COMMENTED OUT TEST SUCCESSFUL TX */
+/* COMMENTED OUT TEST SUCCESSFUL TX */
+/* COMMENTED OUT TEST SUCCESSFUL TX */
+/* COMMENTED OUT TEST SUCCESSFUL TX */
+
+
+
+
+
+
+
       // Non-Sepolia: expect an upstream signed bundle/tx. Until wired, avoid random invalid bytes.
       // Generate a placeholder and log a warning; this will likely be rejected by relays.
       console.warn('[submitPath] Warning: no real signed transaction provided for mainnet path; using placeholder bytes (will fail)')
       signedTx = `0x${crypto.randomBytes(100).toString('hex')}`
       mockBundleHash = `0x${crypto.randomBytes(32).toString('hex')}`
-    }
-
-    // Get the BundleSubmitter and submit
+    // }    // Get the BundleSubmitter and submit
     const submitter = BundleSubmitter.getInstance()
     const result = await submitter.submitToRelays(signedTx, undefined, intent.intent_id)
 
