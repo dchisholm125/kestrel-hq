@@ -83,9 +83,29 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
       // Get current fees
       const { maxFeePerGas, maxPriorityFeePerGas } = await BumpPolicy.getInitialFees(provider, 1)
 
-      // Check funds before building transaction
+      // For testnet self-transfer, tokenIn is not ETH, so value = 0
+      const isNativeIn = false; // Guard: only set value when path truly consumes native ETH
+      const txValue = isNativeIn ? 0n : 0n; // For self-transfer, always 0
+
+      // Build a simple self-transfer transaction for testing
+      const signedTx = await buildAndSignEip1559Tx(wallet, {
+        chainId: BigInt(ENV.CHAIN_ID),
+        from,
+        to: from, // Self-transfer
+        nonce,
+        gasLimit: 21000n,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+        value: txValue,
+        data: '0x'
+      })
+
+      // Parse the signed transaction for logging and funds check
+      const parsedTx = ethers.Transaction.from(signedTx)
+
+      // Check funds after building transaction
       const balance = await provider.getBalance(from)
-      const required = requiredCostWei(21000n, maxFeePerGas, 0n)
+      const required = requiredCostWei(BigInt(parsedTx.gasLimit), BigInt(parsedTx.maxFeePerGas || 0n), BigInt(parsedTx.value || 0n))
       if (balance < required) {
         const balanceEth = parseFloat(ethers.formatEther(balance)).toFixed(6)
         const requiredEth = parseFloat(ethers.formatEther(required)).toFixed(6)
@@ -98,48 +118,21 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
 
       // Pre-send log dump for debugging
       console.log('[submitPath] Pre-send transaction details:', {
-        derivedAmountInWei: '0', // Self-transfer, no derived amount
-        txValue: '0', // value=0n
-        gasLimit: '21000',
-        maxFeePerGas: maxFeePerGas.toString(),
-        maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
-        from,
-        to: from, // Self-transfer
-        dataLength: '0x'.length,
-        nonce: nonce.toString(),
-        chainId: ENV.CHAIN_ID.toString(),
+        derivedAmountInWei: parsedTx.value?.toString() || '0',
+        txValue: parsedTx.value?.toString() || '0',
+        gasLimit: parsedTx.gasLimit.toString(),
+        maxFeePerGas: parsedTx.maxFeePerGas?.toString() || '0',
+        maxPriorityFeePerGas: parsedTx.maxPriorityFeePerGas?.toString() || '0',
+        from: parsedTx.from,
+        to: parsedTx.to,
+        dataLength: parsedTx.data.length,
+        nonce: parsedTx.nonce.toString(),
+        chainId: parsedTx.chainId?.toString() || ENV.CHAIN_ID.toString(),
         balanceWei: balance.toString(),
         requiredWei: required.toString()
       })
 
-      // Build a simple self-transfer transaction for testing
-      const signedTx = await buildAndSignEip1559Tx(wallet, {
-        chainId: BigInt(ENV.CHAIN_ID),
-        from,
-        to: from, // Self-transfer
-        nonce,
-        gasLimit: 21000n,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-        value: 0n,
-        data: '0x'
-      })
-
       console.log(`[submitPath] Built testnet transaction: nonce=${nonce}, from=${from}`)
-
-      // Log transaction details before submission
-      const parsedTx = ethers.Transaction.from(signedTx)
-      console.log(`[submitPath] Pre-submission details:`, {
-        from: parsedTx.from,
-        nonce: Number(parsedTx.nonce),
-        type: parsedTx.type,
-        gasLimit: String(parsedTx.gasLimit),
-        maxFeePerGas: String(parsedTx.maxFeePerGas),
-        maxPriorityFeePerGas: String(parsedTx.maxPriorityFeePerGas),
-        value: String(parsedTx.value),
-  chainId: String(parsedTx.chainId || ENV.CHAIN_ID),
-        txHash: parsedTx.hash
-      })
 
       // Submit via BundleSubmitter (will route to public mempool)
       const submitter = BundleSubmitter.getInstance()
