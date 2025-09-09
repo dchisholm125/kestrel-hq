@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-  "module": "ES2022",
+    "module": "ES2022",
     "target": "ES2022",
     "lib": ["ES2022"],
     "outDir": "./dist",
@@ -9,7 +9,7 @@
     "strict": true,
     "declaration": true,
     "esModuleInterop": true,
-  "moduleResolution": "bundler",
+    "moduleResolution": "bundler",
     "skipLibCheck": true,
     "types": ["node", "mocha", "jest"],
     "baseUrl": ".",
@@ -24,11 +24,13 @@
     "src/services/IntentFSM.ts",
     "src/services/MetricsTracker.ts",
     "src/services/ReceiptChecker.ts",
-  "src/services/BatchingEngine.ts",
-  "src/services/PendingPool.ts",
+    "src/services/BatchingEngine.ts",
+    "src/services/PendingPool.ts",
     "src/services/BundleSubmitter.ts",
-  "src/services/BundleSigner.ts",
-  "src/services/NonceManager.ts",
+    "src/services/BundleSigner.ts",
+    "src/services/NonceManager.ts",
+    "src/services/BumpPolicy.ts",
+    "src/services/ErrorClassifier.ts",
     "src/services/FlashbotsClient.ts",
     "src/services/BloxrouteClient.ts",
     "src/services/PublicSubmitter.ts",
@@ -38,7 +40,7 @@
     "src/stages/**/*.ts",
     "src/utils/**/*.ts",
     "src/simulation/**/*.ts",
-  "src/pipeline/**/*.ts",
+    "src/pipeline/**/*.ts",
     "src/edge/**/*.ts"
   ],
   "references": [

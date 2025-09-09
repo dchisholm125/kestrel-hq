@@ -77,17 +77,18 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
       const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
       const to = await wallet.getAddress()
       const nonce = await provider.getTransactionCount(to, 'latest')
-      const fee = await provider.getFeeData()
-      const gasPrice = fee.gasPrice ?? 1_500_000_000n // 1.5 gwei fallback
-      const legacyTx = {
+      const { maxFeePerGas, maxPriorityFeePerGas } = await BumpPolicy.getInitialFees(provider, 1)
+      const type2Tx = {
         to,
         value: 0n,
         nonce,
-        gasPrice,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
         gasLimit: 21000n,
-        chainId: ENV.CHAIN_ID
+        chainId: ENV.CHAIN_ID,
+        type: 2
       } as const
-      signedTx = await wallet.signTransaction(legacyTx)
+      signedTx = await wallet.signTransaction(type2Tx)
     } else {
     */
 

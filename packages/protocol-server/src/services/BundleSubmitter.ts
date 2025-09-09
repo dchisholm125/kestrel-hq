@@ -1,9 +1,12 @@
-import { Wallet, JsonRpcProvider } from 'ethers'
+import { Wallet, JsonRpcProvider, Transaction } from 'ethers'
 import { ENV } from '../config'
 import FlashbotsClient from './FlashbotsClient'
 import BloxrouteClient from './BloxrouteClient'
 import PublicSubmitter from './PublicSubmitter'
 import ReceiptChecker from './ReceiptChecker'
+import NonceManager from './NonceManager'
+import BumpPolicy from './BumpPolicy'
+import ErrorClassifier from './ErrorClassifier'
 import crypto from 'crypto'
 
 // 🚨 MOCK MODE DETECTION - VERY EXPLICIT 🚨
@@ -362,49 +365,78 @@ export class BundleSubmitter {
       // Basic sanity on the signed tx; if invalid but we have a fallback key, skip straight to fallback path
       const looksLikeRaw = /^0x[0-9a-fA-F]+$/.test(signedTransaction) && signedTransaction.length > 10
 
-      // Try raw submission first
-      let txHash: string
-      try {
-        if (!looksLikeRaw) throw new Error('invalid-raw-tx')
-        txHash = await provider.send('eth_sendRawTransaction', [signedTransaction])
-      } catch (err: any) {
-        const msg = (err?.error?.message || err?.message || '').toLowerCase()
-        // Handle nodes that reject certain types or malformed bundles; fallback to constructing a legacy tx
-        if (msg.includes('transaction type not supported') || msg.includes('rlp: expected input list') || msg.includes('invalid-raw-tx')) {
-          console.warn('🌐 [BundleSubmitter] RPC rejected raw tx type; attempting legacy self-sign fallback...')
-          const canFallback = !!ENV.PUBLIC_SUBMIT_PRIVATE_KEY
-          if (!canFallback) {
-            throw new Error('RPC rejected raw tx and no PUBLIC_SUBMIT_PRIVATE_KEY available for fallback signing')
+      // Try raw submission with intelligent error classification and handling
+      let txHash: string | undefined
+      let retryCount = 0
+      const maxRetries = 5 // Allow more retries for different error types
+
+      while (retryCount <= maxRetries) {
+        try {
+          if (!looksLikeRaw) throw new Error('invalid-raw-tx')
+          txHash = await provider.send('eth_sendRawTransaction', [signedTransaction])
+          break // Success, exit loop
+        } catch (err: any) {
+          const classification = ErrorClassifier.classifyError(err)
+          console.log(`🔍 [BundleSubmitter] Classified error: ${classification.action} - ${classification.reason}`)
+
+          try {
+            const wallet = ENV.PUBLIC_SUBMIT_PRIVATE_KEY ? new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider) : undefined
+            const walletAddress = wallet ? await wallet.getAddress() : undefined
+
+            const actionResult = await ErrorClassifier.executeAction(
+              classification,
+              signedTransaction,
+              provider,
+              retryCount,
+              walletAddress
+            )
+
+            if (actionResult.txHash) {
+              txHash = actionResult.txHash
+              break // Success from error handler
+            }
+
+            if (actionResult.newSignedTx) {
+              signedTransaction = actionResult.newSignedTx
+            }
+
+            if (!actionResult.shouldRetry) {
+              break // Don't retry
+            }
+
+            retryCount++
+            continue // Retry with potentially new signed transaction
+
+          } catch (actionError: any) {
+            // If the error action itself fails, check if we should still retry with backoff
+            if (classification.retryable && retryCount < classification.maxRetries) {
+              console.warn(`⚠️ [BundleSubmitter] Error action failed, backing off: ${actionError.message}`)
+              await new Promise(resolve => setTimeout(resolve, classification.backoffMs || 1000))
+              retryCount++
+              continue
+            } else {
+              throw actionError // Re-throw if no more retries
+            }
           }
-          // Minimal legacy tx send of 0 eth to self (smoke test), to validate path works on this RPC
-          const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
-          const to = await wallet.getAddress()
-          // Use managed nonce to avoid collisions in concurrent flows
-          const { default: NonceManager } = await import('./NonceManager')
-          const nonceManager = NonceManager.getInstance(provider)
-          const nonce = await nonceManager.getNextNonce(to, provider)
-          const fee = await provider.getFeeData()
-          const gasPrice = fee.gasPrice ?? 1_500_000_000n // fallback 1.5 gwei for legacy
-          const legacyTx = {
-            to,
-            value: 0n,
-            nonce,
-            gasPrice,
-            gasLimit: 21000n,
-            chainId: ENV.CHAIN_ID
-          } as const
-          const sent = await wallet.sendTransaction(legacyTx)
-          txHash = sent.hash
-          console.log('✅ [BundleSubmitter] Fallback legacy tx submitted', { hash: txHash })
-        } else {
-          throw err
         }
       }
 
-      console.log('✅ [BundleSubmitter] Public transaction submitted successfully!', {
+      if (!txHash) {
+        throw new Error('Failed to submit transaction after all retry attempts')
+      }      console.log('✅ [BundleSubmitter] Public transaction submitted successfully!', {
         hash: txHash,
         mode: 'PUBLIC_MEMPOOL'
       })
+
+      // Track for receipt polling if we have intent ID
+      if (intentId) {
+        const receiptChecker = new ReceiptChecker()
+        receiptChecker.trackBundle(intentId, txHash)
+        console.log('📋 [BundleSubmitter] Tracking transaction for receipt polling', {
+          intentId,
+          txHash
+        })
+      }
 
       return {
         bundleHash: txHash // Return the transaction hash as bundle hash for consistency

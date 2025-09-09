@@ -1,6 +1,7 @@
 import * as ethers from 'ethers'
 import { GreedyBundleResult, BundleCandidate } from './BatchingEngine'
 import NonceManager from './NonceManager'
+import BumpPolicy from './BumpPolicy'
 
 export interface Bundle {
   trades: BundleCandidate[]
@@ -80,28 +81,20 @@ export class BundleSigner {
   const nonce = await nonceManager.getNextNonce(this.wallet.address, this.provider)
   console.log(`[BundleSigner] Using managed nonce ${nonce} for ${this.wallet.address}`)
 
-    // Get appropriate gas price if provider is available
-    let gasPrice = 1000000000n // Default 1 gwei
-    if (this.provider) {
-      try {
-        const feeData = await this.provider.getFeeData()
-        if (feeData.gasPrice) {
-          gasPrice = feeData.gasPrice
-        }
-      } catch (error) {
-        console.warn('[BundleSigner] gas price fetch failed, using default:', error)
-      }
-    }
+    // Get EIP-1559 fees using BumpPolicy
+    const { maxFeePerGas, maxPriorityFeePerGas } = await BumpPolicy.getInitialFees(this.provider, 1) // 1 gwei priority on Sepolia
+    console.log(`[BundleSigner] Using EIP-1559 fees: maxFee=${maxFeePerGas}, maxPriority=${maxPriorityFeePerGas}`)
 
-    // Create the transaction
+    // Create the transaction (Type-2)
     const tx = {
       to: this.batchExecutorAddress,
       data,
       gasLimit,
-      gasPrice,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
       nonce,
       value: 0, // No ETH being sent directly
-      type: 1, // Legacy transaction type for simplicity
+      type: 2, // EIP-1559 Type-2 transaction
       chainId
     }
 
