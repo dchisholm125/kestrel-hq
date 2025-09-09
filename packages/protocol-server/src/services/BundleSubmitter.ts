@@ -379,7 +379,10 @@ export class BundleSubmitter {
           // Minimal legacy tx send of 0 eth to self (smoke test), to validate path works on this RPC
           const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
           const to = await wallet.getAddress()
-          const nonce = await provider.getTransactionCount(to, 'latest')
+          // Use managed nonce to avoid collisions in concurrent flows
+          const { default: NonceManager } = await import('./NonceManager')
+          const nonceManager = NonceManager.getInstance(provider)
+          const nonce = await nonceManager.getNextNonce(to, provider)
           const fee = await provider.getFeeData()
           const gasPrice = fee.gasPrice ?? 1_500_000_000n // fallback 1.5 gwei for legacy
           const legacyTx = {

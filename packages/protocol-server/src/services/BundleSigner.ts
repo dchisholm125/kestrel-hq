@@ -1,5 +1,6 @@
 import * as ethers from 'ethers'
 import { GreedyBundleResult, BundleCandidate } from './BatchingEngine'
+import NonceManager from './NonceManager'
 
 export interface Bundle {
   trades: BundleCandidate[]
@@ -74,15 +75,10 @@ export class BundleSigner {
       }
     }
 
-    // Get current nonce if provider is available
-    let nonce = 0
-    if (this.provider) {
-      try {
-        nonce = await this.provider.getTransactionCount(this.wallet.address, 'pending')
-      } catch (error) {
-        console.warn('[BundleSigner] nonce fetch failed, using 0:', error)
-      }
-    }
+  // Managed nonce via NonceManager
+  const nonceManager = NonceManager.getInstance(this.provider)
+  const nonce = await nonceManager.getNextNonce(this.wallet.address, this.provider)
+  console.log(`[BundleSigner] Using managed nonce ${nonce} for ${this.wallet.address}`)
 
     // Get appropriate gas price if provider is available
     let gasPrice = 1000000000n // Default 1 gwei

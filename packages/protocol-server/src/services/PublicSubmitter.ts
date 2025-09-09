@@ -1,4 +1,5 @@
 import { Wallet, parseEther } from 'ethers'
+import NonceManager from './NonceManager'
 import { JsonRpcProvider } from 'ethers'
 
 /**
@@ -63,7 +64,9 @@ export class PublicSubmitter {
       console.log('📤 [PublicSubmitter] Sending transaction to public mempool...')
 
       // Send transaction
-      const tx = await this.wallet.sendTransaction(txRequest)
+  // Allocate a managed nonce if manual override is needed in future
+  // Currently sendTransaction will manage nonce, but we keep NonceManager ready
+  const tx = await this.wallet.sendTransaction(txRequest)
 
       console.log(`✅ [PublicSubmitter] Transaction sent!`, {
         hash: tx.hash,
