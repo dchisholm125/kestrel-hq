@@ -88,17 +88,43 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
       const amountInWei = 10000000000000000n; // 0.01 ETH for low test trade size
       const txValue = isNativeIn ? amountInWei : 0n;
 
-      // Build a simple self-transfer transaction for testing
+      // Wire flash-loan path separate from EOA mempool path
+      const useFlashLoan = process.env.USE_FLASH_LOAN === 'true';
+      const flashExecutor = process.env.FLASH_EXECUTOR_ADDRESS || '0x0000000000000000000000000000000000000000'; // Placeholder
+
+      let to: string;
+      let data: string;
+      let finalTxValue: bigint;
+
+      if (useFlashLoan) {
+        // Build call to FlashArbExecutor.executeFlashLoan
+        const asset = '0x0000000000000000000000000000000000000000'; // ETH address (0x0 for native)
+        const amount = txValue;
+        const routeData = '0x'; // Empty route data for test
+
+        // Encode the function call
+        const iface = new ethers.Interface(['function executeFlashLoan(address,uint256,bytes)']);
+        data = iface.encodeFunctionData('executeFlashLoan', [asset, amount, routeData]);
+        to = flashExecutor;
+        finalTxValue = 0n; // tx.value = 0 for flash loan
+      } else {
+        // EOA mempool path: self-transfer
+        to = from;
+        data = '0x';
+        finalTxValue = txValue;
+      }
+
+      // Build a simple transaction for testing
       const signedTx = await buildAndSignEip1559Tx(wallet, {
         chainId: BigInt(ENV.CHAIN_ID),
         from,
-        to: from, // Self-transfer
+        to,
         nonce,
         gasLimit: 21000n,
         maxFeePerGas,
         maxPriorityFeePerGas,
-        value: txValue,
-        data: '0x'
+        value: finalTxValue,
+        data
       })
 
       // Parse the signed transaction for logging and funds check
