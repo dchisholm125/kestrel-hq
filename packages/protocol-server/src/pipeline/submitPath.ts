@@ -1,6 +1,6 @@
 /**
  * submitPath.ts
- * Public-build guard for the post-QUEUED submission path. This routes through the edge seam.
+ * Public-build guard for the p        fs.appendFileSync(file, JSON.stringify(rec) + '\n')st-QUEUED submission path. This routes through the edge seam.
  * In public builds (NOOP defaults active), we never submit; instead we produce a SUBMIT_NOT_ATTEMPTED
  * ReasonedRejection for observability while keeping state at QUEUED (Step 2 discipline: no side effects).
  * Private builds will bypass this guard (returning without error) and handle submission elsewhere.
@@ -76,10 +76,6 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
       const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
       const from = await wallet.getAddress()
 
-      // Reserve nonce for this submission
-      const nonceManager = NonceManager.getInstance(provider)
-      const nonce = await nonceManager.reserveNonce(from, provider)
-
       // Get current fees
       const { maxFeePerGas, maxPriorityFeePerGas } = await BumpPolicy.getInitialFees(provider, 1)
 
@@ -114,34 +110,39 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
         finalTxValue = txValue;
       }
 
+      // Check funds before reserving nonce to avoid burning nonces on pre-send hard-fail
+      const gasLimit = 21000n;
+      const required = requiredCostWei(gasLimit, maxFeePerGas, finalTxValue);
+      const balance = await provider.getBalance(from);
+      if (balance < required) {
+        const balanceEth = parseFloat(ethers.formatEther(balance)).toFixed(6);
+        const requiredEth = parseFloat(ethers.formatEther(required)).toFixed(6);
+        throw new ReasonedRejection(reason('INTERNAL_ERROR', {
+          message: `Insufficient funds: balance=${balanceEth} ETH (${balance} wei), required=${requiredEth} ETH (${required} wei)`
+        }));
+      }
+
+      console.log(`[submitPath] Funds check passed: balance=${ethers.formatEther(balance)} ETH, required=${ethers.formatEther(required)} ETH`);
+
+      // Reserve nonce only after funds check to avoid burning nonces
+      const nonceManager = NonceManager.getInstance(provider);
+      const nonce = await nonceManager.reserveNonce(from, provider);
+
       // Build a simple transaction for testing
       const signedTx = await buildAndSignEip1559Tx(wallet, {
         chainId: BigInt(ENV.CHAIN_ID),
         from,
         to,
         nonce,
-        gasLimit: 21000n,
+        gasLimit,
         maxFeePerGas,
         maxPriorityFeePerGas,
         value: finalTxValue,
         data
-      })
+      });
 
       // Parse the signed transaction for logging and funds check
-      const parsedTx = ethers.Transaction.from(signedTx)
-
-      // Check funds after building transaction
-      const balance = await provider.getBalance(from)
-      const required = requiredCostWei(BigInt(parsedTx.gasLimit), BigInt(parsedTx.maxFeePerGas || 0n), BigInt(parsedTx.value || 0n))
-      if (balance < required) {
-        const balanceEth = parseFloat(ethers.formatEther(balance)).toFixed(6)
-        const requiredEth = parseFloat(ethers.formatEther(required)).toFixed(6)
-        throw new ReasonedRejection(reason('INTERNAL_ERROR', {
-          message: `Insufficient funds: balance=${balanceEth} ETH (${balance} wei), required=${requiredEth} ETH (${required} wei)`
-        }))
-      }
-
-      console.log(`[submitPath] Funds check passed: balance=${ethers.formatEther(balance)} ETH, required=${ethers.formatEther(required)} ETH`)
+      const parsedTx = ethers.Transaction.from(signedTx);
 
       // Pre-send log dump for debugging
       console.log('[submitPath] Pre-send transaction details:', {
@@ -158,14 +159,12 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
         amountInWei: parsedTx.value?.toString() || '0',
         requiredCostWei: required.toString(),
         balanceWei: balance.toString(),
-        classification: balance >= required ? 'ok' : 'hard_fail_insufficient_funds',
+        classification: 'ok', // Funds checked above
         chainId: parsedTx.chainId?.toString() || ENV.CHAIN_ID.toString(),
         txHash: parsedTx.hash
-      })
+      });
 
-      console.log(`[submitPath] Built testnet transaction: nonce=${nonce}, from=${from}`)
-
-      // Submit via BundleSubmitter (will route to public mempool)
+            // Submit via BundleSubmitter (will route to public mempool)
       const submitter = BundleSubmitter.getInstance()
       const result = await submitter.submitToRelays(signedTx, undefined, intent.intent_id)
 
