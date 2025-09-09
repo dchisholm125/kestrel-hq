@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "module": "ES2022",
+  "module": "ES2022",
     "target": "ES2022",
     "lib": ["ES2022"],
     "outDir": "./dist",
@@ -9,6 +9,7 @@
     "strict": true,
     "declaration": true,
     "esModuleInterop": true,
+  "moduleResolution": "bundler",
     "skipLibCheck": true,
     "types": ["node", "mocha", "jest"],
     "baseUrl": ".",

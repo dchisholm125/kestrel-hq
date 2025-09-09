@@ -7,13 +7,29 @@
 // Load environment variables from .env.protocol-server file
 import dotenv from 'dotenv'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-dotenv.config({ path: path.join(__dirname, '..', '.env.protocol-server') })
+// Resolve package root for both ts-node (src) and built (dist/...) layouts
+const distMarker = `${path.sep}dist${path.sep}`
+const distIdx = __dirname.lastIndexOf(distMarker)
+const packageRoot = distIdx !== -1 ? __dirname.slice(0, distIdx) : path.resolve(__dirname, '..')
+
+// Try to load .env.protocol-server from package root, with cwd fallback
+const candidateEnvPaths = [
+  path.join(packageRoot, '.env.protocol-server'),
+  path.join(process.cwd(), '.env.protocol-server')
+]
+for (const p of candidateEnvPaths) {
+  if (fs.existsSync(p)) {
+    dotenv.config({ path: p })
+    break
+  }
+}
 
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || 'development',
@@ -75,6 +91,12 @@ export const ENV = {
   BLOXROUTE_GRPC_ENDPOINT: process.env.SEPOLIA_SWITCH === '1'
     ? (process.env.BLOXROUTE_SEPOLIA_gRPC || 'virginia-intents.blxrbdn.com:5005')
     : (process.env.BLOXROUTE_MAINNET_gRPC || 'virginia-mainnet.blxrbdn.com:5005')
+  ,
+
+  // Public mempool submission signer (used only for testnets like Sepolia when we need to self-sign)
+  PUBLIC_SUBMIT_PRIVATE_KEY: process.env.SEPOLIA_SWITCH === '1'
+    ? (process.env.PUBLIC_SUBMIT_PRIVATE_KEY_SEPOLIA || '')
+    : (process.env.PUBLIC_SUBMIT_PRIVATE_KEY || '')
 }
 
 export const CONSTANTS = {

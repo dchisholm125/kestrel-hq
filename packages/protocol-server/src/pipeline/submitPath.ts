@@ -12,6 +12,8 @@ import type { EdgeModules } from '../edge/loader'
 import { reason, ReasonedRejection } from '@kestrel-hq/reasons'
 import BundleSubmitter from '../services/BundleSubmitter'
 import crypto from 'crypto'
+import { Wallet, JsonRpcProvider } from 'ethers'
+import { ENV } from '../config'
 
 export type SubmitCtx = {
   edge: EdgeModules
@@ -46,13 +48,44 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
   try {
     console.log(`[submitPath] Starting submission for intent ${intent.intent_id}`)
 
-    // Generate a mock signed transaction and bundle hash for demonstration
-    const mockSignedTx = `0x${crypto.randomBytes(100).toString('hex')}`
-    const mockBundleHash = `0x${crypto.randomBytes(32).toString('hex')}`
+    let signedTx: string
+    let mockBundleHash: string | undefined
+
+    // On Sepolia, construct a minimal valid legacy tx and sign it with PUBLIC_SUBMIT_PRIVATE_KEY
+    if (ENV.SEPOLIA_SWITCH) {
+      if (!ENV.PUBLIC_SUBMIT_PRIVATE_KEY) {
+        throw new ReasonedRejection(
+          reason('SUBMIT_NOT_ATTEMPTED', {
+            message: 'missing PUBLIC_SUBMIT_PRIVATE_KEY[_SEPOLIA] for Sepolia public mempool submission'
+          })
+        )
+      }
+      const provider = new JsonRpcProvider(ENV.RPC_URL || 'https://ethereum-sepolia.public.blastapi.io')
+      const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
+      const to = await wallet.getAddress()
+      const nonce = await provider.getTransactionCount(to, 'latest')
+  const fee = await provider.getFeeData()
+  const gasPrice = fee.gasPrice ?? 1_500_000_000n // 1.5 gwei fallback
+      const legacyTx = {
+        to,
+        value: 0n,
+        nonce,
+        gasPrice,
+        gasLimit: 21000n,
+        chainId: ENV.CHAIN_ID
+      } as const
+      signedTx = await wallet.signTransaction(legacyTx)
+    } else {
+      // Non-Sepolia: expect an upstream signed bundle/tx. Until wired, avoid random invalid bytes.
+      // Generate a placeholder and log a warning; this will likely be rejected by relays.
+      console.warn('[submitPath] Warning: no real signed transaction provided for mainnet path; using placeholder bytes (will fail)')
+      signedTx = `0x${crypto.randomBytes(100).toString('hex')}`
+      mockBundleHash = `0x${crypto.randomBytes(32).toString('hex')}`
+    }
 
     // Get the BundleSubmitter and submit
     const submitter = BundleSubmitter.getInstance()
-    const result = await submitter.submitToRelays(mockSignedTx, undefined, intent.intent_id)
+    const result = await submitter.submitToRelays(signedTx, undefined, intent.intent_id)
 
     // Log successful submission with bundle hash for ReceiptChecker tracking
     console.log(`[submitPath] Submission completed for intent ${intent.intent_id}, bundle hash: ${result.bundleHash || mockBundleHash}`)

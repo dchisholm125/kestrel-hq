@@ -4,6 +4,11 @@
 pm2 start dist/src/main.js --name "kestrel-protocol"
 ```
 
+Environment:
+- Copy `.env.protocol-server.example` to `.env.protocol-server` and fill the secrets.
+- Set `SEPOLIA_SWITCH=1` to use Sepolia public mempool. In this mode, private relays are skipped and a minimal legacy tx will be signed and sent if no raw signed tx is provided.
+- Provide `RPC_URL` (defaults to a public BlastAPI Sepolia endpoint) and `PUBLIC_SUBMIT_PRIVATE_KEY_SEPOLIA` (funded) for the fallback signer.
+
 # Kestrel Protocol (protocol-server)
 
 Kestrel Protocol is the **protocol server** for intent submission, validation, and bundling.  
