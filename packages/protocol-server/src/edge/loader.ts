@@ -33,6 +33,27 @@ function writeAudit(mode: 'noop' | 'private', modules: string[]) {
 
 async function loadPrivate(): Promise<EdgeModules | null> {
   try {
+    // First try to load from local edge modules (copied)
+    try {
+      const localPath = path.resolve(__dirname, 'src', 'index.ts');
+      // Use dynamic import for TypeScript
+      const mod = await import(localPath);
+      const m: any = mod?.default ?? mod;
+      if (m) {
+        const out: EdgeModules = {
+          BundleAssembler: m.BundleAssembler ?? defaults.BundleAssembler,
+          RelayRouter: m.RelayRouter ?? defaults.RelayRouter,
+          InclusionPredictor: m.InclusionPredictor ?? defaults.InclusionPredictor,
+          AntiMEV: m.AntiMEV ?? defaults.AntiMEV,
+          CapitalPolicy: m.CapitalPolicy ?? defaults.CapitalPolicy,
+        };
+        return out;
+      }
+    } catch (localError) {
+      console.log('[edge-loader] Local edge modules not found, trying package import:', (localError as Error).message);
+    }
+
+    // Fallback to package import
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = await (new Function('p', 'return import(p)'))('@kestrel-protocol-private/edge')
     const m: any = mod?.default ?? mod
@@ -45,7 +66,8 @@ async function loadPrivate(): Promise<EdgeModules | null> {
       CapitalPolicy: m.CapitalPolicy ?? defaults.CapitalPolicy,
     }
     return out
-  } catch {
+  } catch (error) {
+    console.log('[edge-loader] Failed to load private modules:', (error as Error).message);
     return null
   }
 }

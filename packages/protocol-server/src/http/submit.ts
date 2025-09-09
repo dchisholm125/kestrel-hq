@@ -18,6 +18,7 @@ import { appendRejection } from '../utils/rejectionAudit'
 import { advanceIntent } from '../fsm/transitionExecutor'
 import { IntentState, ErrorEnvelope } from '@kestrel/dto'
 import { getEdgeModules } from '../edge/loader'
+import { humanConfirmHttp } from '../utils/logger'
 import { submitPath } from '../pipeline/submitPath'
 
 export async function postIntent(req: Request, res: Response) {
@@ -162,6 +163,7 @@ export async function postIntent(req: Request, res: Response) {
     metrics.incrementAccepted()
     metrics.incrementReceived()
 
+  humanConfirmHttp({ path: '/intent', method: 'POST', status: 201, corr_id: correlation_id, latency_ms: elapsed })
   return res.status(201).json({ intent_id, state: final?.state ?? IntentState.RECEIVED, correlation_id })
   } catch (e) {
   // surface the error for test visibility

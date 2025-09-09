@@ -56,4 +56,15 @@ export function logHttp(payload: HttpPayload): void {
   logger.info(base)
 }
 
+// Print a short, human-friendly confirmation line. This is intentionally
+// concise and aimed at terminal observers (non-JSON). Tests and structured
+// logging should continue to use `logHttp` for machine parsing.
+export function humanConfirmHttp(payload: HttpPayload): void {
+  try {
+    const corr = payload.corr_id || '-'
+    // eslint-disable-next-line no-console
+    console.log(`[http] ${payload.method} ${payload.path} ${payload.status} corr=${corr} ${payload.latency_ms ?? '-'}ms`)
+  } catch (e) {}
+}
+
 export default logger

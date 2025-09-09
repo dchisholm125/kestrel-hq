@@ -1,3 +1,9 @@
+// This file is the main entry point for the protocol server application, setting up the HTTP server,
+// routes, and core logic for handling transaction submissions and intent management.
+
+// It runs on port 4000 by default and exposes endpoints for health checks,
+// transaction submission, and intent status retrieval.
+
 import express, { Express, Request, Response } from 'express'
 import { ENV } from './config.js'
 import { validateSubmitBody } from './validators/submitValidator.js'
