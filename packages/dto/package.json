@@ -22,10 +22,6 @@
     "clean": "rm -rf dist",
     "prepublishOnly": "pnpm run build && pnpm test --if-present"
   },
-  "publishConfig": {
-    "access": "restricted",
-    "registry": "https://<your-private-registry>"
-  },
   "packageManager": "pnpm@10.15.1",
   "devDependencies": {
     "typescript": "^5.2.2"

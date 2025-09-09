@@ -69,11 +69,117 @@ describe('stages', () => {
   await expect(policyIntent(ctx)).rejects.toBeInstanceOf(ReasonedRejection)
     })
 
-    it('advances to QUEUED when enqueue succeeds', async () => {
-      const intent: any = { id: 'p3', payload: { from: 'good' } }
-      const ctx: any = { intent, corr_id: 'c', request_hash: 'r', cfg: {}, queue: { capacity: 1, enqueue: async () => true } }
-  const res = await policyIntent(ctx)
-  expect(res.next).toBe(IntentState.QUEUED)
+    it('rejects arbitrage with insufficient profit', async () => {
+      const intent: any = {
+        intent_id: 'p4',
+        payload: {
+          from: 'good',
+          candidate: {
+            id: 'arb1',
+            tokenIn: '0xA0b86a33E6441e88C5F2712C3E9b74B8E4Fc7f0',
+            tokenOut: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+            amountIn: '1000000000000000000', // 1 ETH
+            hops: []
+          },
+          quote: {
+            amountOut: '1000000000000000000', // 1 ETH out (no profit)
+            perHopAmounts: ['1000000000000000000'],
+            gasEstimate: '200000' // 200k gas
+          },
+          gasEstimate: '200000'
+        }
+      }
+      const ctx: any = {
+        intent,
+        corr_id: 'c',
+        request_hash: 'r',
+        cfg: {
+          profitGate: {
+            minProfitWei: '100000000000000000', // 0.1 ETH minimum
+            minRoiBps: 100, // 1% minimum ROI
+            maxFeePerGas: '20000000000', // 20 gwei
+            maxPriorityFeeGas: '1000000000', // 1 gwei
+            flashLoanUsed: false
+          }
+        },
+        queue: { capacity: 1, enqueue: async () => true }
+      }
+      await expect(policyIntent(ctx)).rejects.toBeInstanceOf(ReasonedRejection)
     })
-  })
-})
+
+    it('accepts arbitrage with sufficient profit', async () => {
+      const intent: any = {
+        intent_id: 'p5',
+        payload: {
+          from: 'good',
+          candidate: {
+            id: 'arb2',
+            tokenIn: '0xA0b86a33E6441e88C5F2712C3E9b74B8E4Fc7f0',
+            tokenOut: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+            amountIn: '1000000000000000000', // 1 ETH
+            hops: []
+          },
+          quote: {
+            amountOut: '1020000000000000000', // 1.02 ETH out (2% profit)
+            perHopAmounts: ['1020000000000000000'],
+            gasEstimate: '150000' // 150k gas
+          },
+          gasEstimate: '150000'
+        }
+      }
+      const ctx: any = {
+        intent,
+        corr_id: 'c',
+        request_hash: 'r',
+        cfg: {
+          profitGate: {
+            minProfitWei: '10000000000000000', // 0.01 ETH minimum
+            minRoiBps: 50, // 0.5% minimum ROI
+            maxFeePerGas: '20000000000', // 20 gwei
+            maxPriorityFeeGas: '1000000000', // 1 gwei
+            flashLoanUsed: false
+          }
+        },
+        queue: { capacity: 1, enqueue: async () => true }
+      }
+      const res = await policyIntent(ctx)
+      expect(res.next).toBe(IntentState.QUEUED)
+    })
+
+    it('rejects arbitrage with insufficient ROI', async () => {
+      const intent: any = {
+        intent_id: 'p6',
+        payload: {
+          from: 'good',
+          candidate: {
+            id: 'arb3',
+            tokenIn: '0xA0b86a33E6441e88C5F2712C3E9b74B8E4Fc7f0',
+            tokenOut: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+            amountIn: '1000000000000000000', // 1 ETH
+            hops: []
+          },
+          quote: {
+            amountOut: '1005000000000000000', // 1.005 ETH out (0.5% profit)
+            perHopAmounts: ['1005000000000000000'],
+            gasEstimate: '300000' // 300k gas (high gas cost)
+          },
+          gasEstimate: '300000'
+        }
+      }
+      const ctx: any = {
+        intent,
+        corr_id: 'c',
+        request_hash: 'r',
+        cfg: {
+          profitGate: {
+            minProfitWei: '10000000000000000', // 0.01 ETH minimum
+            minRoiBps: 100, // 1% minimum ROI
+            maxFeePerGas: '20000000000', // 20 gwei
+            maxPriorityFeeGas: '1000000000', // 1 gwei
+            flashLoanUsed: false
+          }
+        },
+        queue: { capacity: 1, enqueue: async () => true }
+      }
+      await expect(policyIntent(ctx)).rejects.toBeInstanceOf(ReasonedRejection)
+    })

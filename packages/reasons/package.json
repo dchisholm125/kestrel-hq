@@ -25,10 +25,6 @@
   "dependencies": {
   "@kestrel-hq/dto": "workspace:0.2.0"
   },
-  "publishConfig": {
-    "access": "restricted",
-    "registry": "https://<your-private-registry>"
-  },
   "packageManager": "pnpm@10.15.1",
   "devDependencies": {
     "typescript": "^5.5.0",

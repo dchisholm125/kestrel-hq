@@ -17,6 +17,7 @@ import { ENV } from '../config'
 import { buildAndSignEip1559Tx, requiredCostWei } from '../services/TxBuilder'
 import NonceManager from '../services/NonceManager'
 import BumpPolicy from '../services/BumpPolicy'
+import { intentStore } from '../services/IntentStore'
 
 export type SubmitCtx = {
   edge: EdgeModules
@@ -150,6 +151,42 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
       // Parse the signed transaction for logging and funds check
       const parsedTx = ethers.Transaction.from(signedTx);
 
+      // Get the full intent from store for profit calculation
+      const fullIntent = intentStore.getById(ctx.intent.intent_id);
+
+      // Calculate profit metrics for audit logging
+      let profitMetrics = {
+        expectedProfitWei: '0',
+        roiBps: 0,
+        gasCostWei: required.toString(),
+        flashPremiumWei: '0',
+        totalCostWei: required.toString()
+      };
+
+      // If this is a real arbitrage opportunity, calculate profit
+      if (fullIntent?.payload?.candidate && fullIntent?.payload?.quote) {
+        const candidate = fullIntent.payload.candidate;
+        const quote = fullIntent.payload.quote;
+        const gasEstimate = fullIntent.payload.gasEstimate ? BigInt(fullIntent.payload.gasEstimate) : 500000n;
+
+        // Use same profit calculation as policy gate
+        const amountIn = BigInt(candidate.amountIn || '0');
+        const expectedOut = BigInt(quote.amountOut || '0');
+        const gasCostWei = gasEstimate * (maxFeePerGas + maxPriorityFeePerGas);
+        const flashPremiumWei = useFlashLoan ? (amountIn * 9n) / 10000n : 0n; // 0.09% Aave premium
+        const totalCostWei = gasCostWei + flashPremiumWei;
+        const profitWei = expectedOut - amountIn - totalCostWei;
+        const roiBps = amountIn > 0n ? Number((profitWei * 10000n) / amountIn) : 0;
+
+        profitMetrics = {
+          expectedProfitWei: profitWei.toString(),
+          roiBps,
+          gasCostWei: gasCostWei.toString(),
+          flashPremiumWei: flashPremiumWei.toString(),
+          totalCostWei: totalCostWei.toString()
+        };
+      }
+
       // Pre-send log dump for debugging
       console.log('[submitPath] Pre-send transaction details:', {
         from: parsedTx.from,
@@ -167,7 +204,13 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
         balanceWei: balance.toString(),
         classification: 'ok', // Funds checked above
         chainId: parsedTx.chainId?.toString() || ENV.CHAIN_ID.toString(),
-        txHash: parsedTx.hash
+        txHash: parsedTx.hash,
+        // Profit metrics
+        expectedProfitWei: profitMetrics.expectedProfitWei,
+        roiBps: profitMetrics.roiBps,
+        gasCostWei: profitMetrics.gasCostWei,
+        flashPremiumWei: profitMetrics.flashPremiumWei,
+        totalCostWei: profitMetrics.totalCostWei
       });
 
             // Submit via BundleSubmitter (will route to public mempool)
@@ -188,7 +231,17 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
           intent_id: intent.intent_id,
           bundle_hash: result.bundleHash,
           status: 'submitted_testnet',
-          network: 'testnet'
+          network: 'testnet',
+          // Profit metrics for audit trail
+          expectedProfitWei: profitMetrics.expectedProfitWei,
+          roiBps: profitMetrics.roiBps,
+          gasCostWei: profitMetrics.gasCostWei,
+          flashPremiumWei: profitMetrics.flashPremiumWei,
+          totalCostWei: profitMetrics.totalCostWei,
+          amountInWei: parsedTx.value?.toString() || '0',
+          maxFeePerGas: parsedTx.maxFeePerGas?.toString() || '0',
+          maxPriorityFeePerGas: parsedTx.maxPriorityFeePerGas?.toString() || '0',
+          flashLoanUsed: useFlashLoan
         }
         fs.appendFileSync(file, JSON.stringify(rec) + '\n')
       } catch (e) {
