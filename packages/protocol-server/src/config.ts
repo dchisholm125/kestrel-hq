@@ -109,7 +109,10 @@ export const ENV = {
   // Public mempool submission signer (used only for testnets like Sepolia when we need to self-sign)
   PUBLIC_SUBMIT_PRIVATE_KEY: process.env.SEPOLIA_SWITCH === '1'
     ? (process.env.PUBLIC_SUBMIT_PRIVATE_KEY_SEPOLIA || '')
-    : (process.env.PUBLIC_SUBMIT_PRIVATE_KEY || '')
+    : (process.env.PUBLIC_SUBMIT_PRIVATE_KEY || ''),
+
+  // Heartbeat/test transaction flag - disable to prevent self-transfers unless real opportunities exist
+  ENABLE_HEARTBEAT_TX: process.env.ENABLE_HEARTBEAT_TX === 'true'
 }
 
 export const CONSTANTS = {

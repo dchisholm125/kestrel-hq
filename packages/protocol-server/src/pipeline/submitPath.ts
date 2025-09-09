@@ -72,6 +72,12 @@ export async function submitPath(ctx: SubmitCtx): Promise<void> {
 
       console.log('[submitPath] Testnet detected; building transaction for public mempool submission')
 
+      // Check if heartbeat/test transactions are enabled
+      if (!ENV.ENABLE_HEARTBEAT_TX) {
+        console.log('[submitPath] Heartbeat transactions disabled; skipping test transaction build')
+        return // Skip transaction building unless we have a vetted opportunity
+      }
+
       const provider = new JsonRpcProvider(ENV.RPC_URL)
       const wallet = new Wallet(ENV.PUBLIC_SUBMIT_PRIVATE_KEY).connect(provider)
       const from = await wallet.getAddress()
