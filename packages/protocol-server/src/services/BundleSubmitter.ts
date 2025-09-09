@@ -136,6 +136,13 @@ export class BundleSubmitter {
         currentChain: CURRENT_CHAIN
       })
 
+      // Skip relay initialization for Sepolia (uses public mempool instead)
+      if (ENV.SEPOLIA_SWITCH) {
+        console.log('[BundleSubmitter] ⏭️  Skipping relay initialization for Sepolia (using public mempool)')
+        this.initialized = true
+        return
+      }
+
       // Initialize relay clients based on available relays for current chain
       for (const relay of AVAILABLE_RELAYS) {
         try {
@@ -175,7 +182,7 @@ export class BundleSubmitter {
       }
 
       // Initialize Public Submitter for testnets
-      if (ENV.SEPOLIA_SWITCH && ENV.SUBMISSION_MODE === 'public') {
+      if (ENV.SEPOLIA_SWITCH) {
         try {
           // We'll initialize this when needed in submitToRelays
           console.log('[BundleSubmitter] ✅ Public submitter enabled for Sepolia testnet')
@@ -189,7 +196,7 @@ export class BundleSubmitter {
       console.log('[BundleSubmitter] 🎯 Initialization complete', {
         hasFlashbots: !!this.flashbots,
         hasBloxroute: !!this.bloxroute,
-        hasPublicSubmitter: ENV.SEPOLIA_SWITCH && ENV.SUBMISSION_MODE === 'public',
+        hasPublicSubmitter: ENV.SEPOLIA_SWITCH,
         network: ENV.SEPOLIA_SWITCH ? 'Sepolia Testnet' : 'Mainnet',
         submissionMode: ENV.SUBMISSION_MODE,
         availableRelays: AVAILABLE_RELAYS.length,
@@ -210,7 +217,7 @@ export class BundleSubmitter {
       console.warn('🚨 [BundleSubmitter] Would submit to:', {
         flashbots: !!this.flashbots,
         bloxroute: !!this.bloxroute,
-        publicMempool: ENV.SEPOLIA_SWITCH && ENV.SUBMISSION_MODE === 'public',
+        publicMempool: ENV.SEPOLIA_SWITCH,
         targetBlock: targetBlock,
         intentId: intentId,
         network: ENV.SEPOLIA_SWITCH ? 'Sepolia Testnet' : 'Mainnet',
@@ -230,13 +237,13 @@ export class BundleSubmitter {
       return { bundleHash: mockBundleHash }
     }
 
-    // 🌐 PUBLIC MEMPOOL MODE - For Sepolia testnet
-    if (ENV.SEPOLIA_SWITCH && ENV.SUBMISSION_MODE === 'public') {
+    // 🌐 PUBLIC MEMPOOL MODE - For Sepolia testnet (automatic when SEPOLIA_SWITCH=1)
+    if (ENV.SEPOLIA_SWITCH) {
       console.log('🌐 [BundleSubmitter] PUBLIC MEMPOOL MODE - Using public transaction for Sepolia testnet')
       return this.submitPublicTransaction(signedTransaction, intentId)
     }
 
-    // ✅ REAL BUNDLE MODE - Proceed with actual bundle submissions
+    // ✅ REAL BUNDLE MODE - For mainnet with proper relay configuration
     console.log('✅ [BundleSubmitter] REAL BUNDLE MODE - Sending to live relays')
 
     const tasks: { name: string; promise: Promise<unknown> }[] = []
@@ -347,43 +354,27 @@ export class BundleSubmitter {
     try {
       console.log('🌐 [BundleSubmitter] Initializing public transaction submitter...')
 
-      // Create provider and wallet for public submission
+      // Create provider for public submission (no wallet needed for raw tx submission)
       const { JsonRpcProvider } = await import('ethers')
-      const provider = new JsonRpcProvider(ENV.RPC_URL || 'https://rpc.sepolia.org')
-      const wallet = new Wallet(ENV.FLASHBOTS_SIGNING_KEY)
+      const provider = new JsonRpcProvider(ENV.RPC_URL || 'https://ethereum-sepolia.publicnode.com')
 
-      // Connect wallet to provider
-      const connectedWallet = wallet.connect(provider)
+      console.log('🌐 [BundleSubmitter] Submitting signed transaction to public mempool...')
 
-      // Initialize public submitter
-      const publicSubmitter = new PublicSubmitter(provider, connectedWallet)
-
-      console.log('🌐 [BundleSubmitter] Submitting to public mempool...')
-
-      // Submit the transaction
-      const result = await publicSubmitter.submitPublicTx({
-        // We could parse the signed transaction to extract details, but for now use defaults
-      })
+      // Submit the already-signed transaction using the RPC method
+      const txHash = await provider.send("eth_sendRawTransaction", [signedTransaction])
 
       console.log('✅ [BundleSubmitter] Public transaction submitted successfully!', {
-        hash: result.hash,
-        blockNumber: result.blockNumber,
-        status: result.status
+        hash: txHash,
+        mode: 'PUBLIC_MEMPOOL'
       })
 
-      // Track the transaction for receipt polling
-      if (intentId) {
-        const receiptChecker = new ReceiptChecker()
-        receiptChecker.trackBundle(intentId, result.hash)
+      return {
+        bundleHash: txHash // Return the transaction hash as bundle hash for consistency
       }
-
-      return { bundleHash: result.hash }
 
     } catch (error) {
       console.error('❌ [BundleSubmitter] Public transaction submission failed:', error)
-
-      // In case of failure, return undefined but don't crash
-      return { bundleHash: undefined }
+      throw error
     }
   }
 }

@@ -43,7 +43,9 @@ export const ENV = {
   SUBMIT_MOCK: process.env.SUBMIT_MOCK === 'true',
 
   // Chain ID for network detection
-  CHAIN_ID: process.env.CHAIN_ID ? Number(process.env.CHAIN_ID) : (process.env.SEPOLIA_SWITCH === '1' ? 11155111 : 1),
+  CHAIN_ID: process.env.SEPOLIA_SWITCH === '1'
+    ? (process.env.SEPOLIA_CHAIN_ID ? Number(process.env.SEPOLIA_CHAIN_ID) : 11155111)
+    : (process.env.MAINNET_CHAIN_ID ? Number(process.env.MAINNET_CHAIN_ID) : 1),
 
   // Mainnet relay URLs
   FLASHBOTS_MAINNET: process.env.FLASHBOTS_MAINNET || 'https://relay.flashbots.net',
@@ -57,13 +59,17 @@ export const ENV = {
   FLASHBOTS_RELAY_URL: process.env.SEPOLIA_SWITCH === '1'
     ? (process.env.SEPOLIA_FLASHBOTS_RELAY || 'https://relay-sepolia.flashbots.net')
     : (process.env.FLASHBOTS_ENDPOINT || 'https://relay.flashbots.net'),
-  FLASHBOTS_SIGNING_KEY: process.env.FLASHBOTS_KEY || process.env.FLASHBOTS_SIGNING_KEY || '',
+  FLASHBOTS_SIGNING_KEY: process.env.SEPOLIA_SWITCH === '1'
+    ? (process.env.FLASHBOTS_SEPOLIA_SIGNING_KEY || '')
+    : (process.env.FLASHBOTS_MAINNET_KEY || process.env.FLASHBOTS_MAINNET_SIGNING_KEY || ''),
 
   // BloXroute configuration - use appropriate relay based on SEPOLIA_SWITCH
   BLOXROUTE_RELAY_URL: process.env.SEPOLIA_SWITCH === '1'
     ? (process.env.BLOXROUTE_RELAY_SEPOLIA_HTTP_URL || 'https://virginia-intents.blxrbdn.com')
     : (process.env.BLOXROUTE_RELAY_MAINNET_HTTP_URL || 'https://virginia-mainnet.blxrbdn.com'),
-  BLOXROUTE_AUTH: process.env.BLOXROUTE_AUTH_HEADER || process.env.BLOXROUTE_AUTH || '',
+  BLOXROUTE_AUTH: process.env.SEPOLIA_SWITCH === '1'
+    ? (process.env.BLOXROUTE_SEPOLIA_AUTH_HEADER || process.env.BLOXROUTE_SEPOLIA_AUTH || '')
+    : (process.env.BLOXROUTE_MAINNET_AUTH_HEADER || process.env.BLOXROUTE_MAINNET_AUTH || ''),
 
   // Additional bloXroute gRPC endpoints
   BLOXROUTE_GRPC_ENDPOINT: process.env.SEPOLIA_SWITCH === '1'
