@@ -27,6 +27,7 @@
     "src/services/FlashbotsClient.ts",
     "src/services/BloxrouteClient.ts",
     "src/services/PublicSubmitter.ts",
+    "src/scripts/self-proof-test.ts",
     "src/fsm/**/*.ts",
     "src/db/**/*.ts",
     "src/stages/**/*.ts",

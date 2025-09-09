@@ -6,6 +6,8 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { JsonRpcProvider } from 'ethers'
+import { ENV } from '../config'
 
 // Colorful logging utilities
 const colors = {
@@ -67,6 +69,7 @@ export class ReceiptChecker {
   private persistenceFile: string
   private successLogFile: string
   private pollCycleCount: number = 0
+  private provider?: JsonRpcProvider
 
   constructor(relayUrl: string = 'https://relay.flashbots.net', pollInterval: number = 3000, maxAge: number = 300000) {
     this.relayUrl = relayUrl.replace(/\/$/, '')
@@ -209,7 +212,15 @@ export class ReceiptChecker {
     // Check each bundle
     for (const tracked of toCheck) {
       try {
-        await this.checkBundleStatus(tracked)
+        // Check if this is a public transaction (not a bundle hash)
+        // Public transactions start with 0x and are 66 characters (32 bytes + 0x)
+        const isPublicTx = tracked.bundleHash.startsWith('0x') && tracked.bundleHash.length === 66
+
+        if (isPublicTx) {
+          await this.checkPublicTransactionStatus(tracked)
+        } else {
+          await this.checkBundleStatus(tracked)
+        }
       } catch (error) {
         logSubmission('❌ POLL ERROR', tracked.bundleHash, 'error', {
           intentId: tracked.intentId,
@@ -333,6 +344,73 @@ export class ReceiptChecker {
     } else {
       // Update persistence for status changes
       await this.persistBundles()
+    }
+  }
+
+  /**
+   * Check status of a public transaction via RPC
+   */
+  private async checkPublicTransactionStatus(tracked: TrackedBundle): Promise<void> {
+    tracked.lastChecked = Date.now()
+
+    try {
+      // Initialize provider if not already done
+      if (!this.provider) {
+        this.provider = new JsonRpcProvider(ENV.RPC_URL)
+      }
+
+      // Get transaction receipt
+      const receipt = await this.provider.getTransactionReceipt(tracked.bundleHash)
+
+      if (receipt) {
+        // Transaction is confirmed
+        const oldStatus = tracked.status
+        tracked.status = receipt.status === 1 ? 'included' : 'failed'
+        tracked.blockNumber = receipt.blockNumber
+        tracked.txHash = receipt.hash
+
+        const elapsed = Date.now() - tracked.submittedAt
+
+        if (tracked.status === 'included') {
+          logSubmission('✅ INCLUDED', tracked.bundleHash, 'success', {
+            intentId: tracked.intentId,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed?.toString(),
+            elapsedMs: elapsed,
+            confirmations: receipt.confirmations || 0
+          })
+        } else {
+          logSubmission('❌ FAILED', tracked.bundleHash, 'failed', {
+            intentId: tracked.intentId,
+            blockNumber: receipt.blockNumber,
+            elapsedMs: elapsed
+          })
+        }
+
+        // Clean up after final status
+        if (oldStatus === 'pending') {
+          setTimeout(async () => {
+            this.trackedBundles.delete(tracked.bundleHash)
+            await this.persistBundles()
+            logSubmission('🗑️ CLEANUP', tracked.bundleHash, 'removed', { intentId: tracked.intentId })
+          }, 10000)
+        } else {
+          await this.persistBundles()
+        }
+      } else {
+        // Transaction not yet mined
+        logSubmission('⏳ PENDING', tracked.bundleHash, 'pending', {
+          intentId: tracked.intentId,
+          elapsedMs: Date.now() - tracked.submittedAt
+        })
+      }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logSubmission('❌ ERROR', tracked.bundleHash, 'error', {
+        intentId: tracked.intentId,
+        error: errorMessage
+      })
     }
   }
 
