@@ -37,10 +37,16 @@ describe('OpportunityIdentifier (unit)', () => {
     const result = await oi.analyzeTransaction(dummyHash);
     
     expect(result).not.toBeNull();
-    expect(result?.hash).toBe(dummyHash);
-    expect(result?.path).toEqual(path);
-    expect(result?.amountInWei).toBe(mockTx.value);
-    expect(result?.dex).toBe('uniswap_v2');
+    expect(result?.id).toBeDefined(); // ID is generated hash
+    expect(result?.hops).toBeDefined();
+    expect(result?.hops.length).toBe(1);
+    expect(result?.hops[0].dex).toBe('V2');
+    expect(result?.hops[0].tokenIn).toBe(WETH_ADDRESS);
+    expect(result?.hops[0].tokenOut).toBe(path[1]);
+    expect(result?.amountIn).toBe(mockTx.value);
+    expect(result?.tokenIn).toBe(WETH_ADDRESS);
+    expect(result?.tokenOut).toBe(path[1]);
+    expect(result?.source).toBe('mempool');
   });
 
   test('identifies a Sushiswap swapExactETHForTokens opportunity', async () => {
@@ -65,10 +71,16 @@ describe('OpportunityIdentifier (unit)', () => {
     const result = await oi.analyzeTransaction(dummyHash);
     
     expect(result).not.toBeNull();
-    expect(result?.hash).toBe(dummyHash);
-    expect(result?.path).toEqual(path);
-    expect(result?.amountInWei).toBe(mockTx.value);
-    expect(result?.dex).toBe('sushiswap');
+    expect(result?.id).toBeDefined();
+    expect(result?.hops).toBeDefined();
+    expect(result?.hops.length).toBe(1);
+    expect(result?.hops[0].dex).toBe('V2');
+    expect(result?.hops[0].tokenIn).toBe(WETH_ADDRESS);
+    expect(result?.hops[0].tokenOut).toBe(path[1]);
+    expect(result?.amountIn).toBe(mockTx.value);
+    expect(result?.tokenIn).toBe(WETH_ADDRESS);
+    expect(result?.tokenOut).toBe(path[1]);
+    expect(result?.source).toBe('mempool');
   });
 
   test('identifies a Curve V2 swapExactETHForTokens opportunity', async () => {
@@ -93,10 +105,16 @@ describe('OpportunityIdentifier (unit)', () => {
     const result = await oi.analyzeTransaction(dummyHash);
     
     expect(result).not.toBeNull();
-    expect(result?.hash).toBe(dummyHash);
-    expect(result?.path).toEqual(path);
-    expect(result?.amountInWei).toBe(mockTx.value);
-    expect(result?.dex).toBe('curve_v2');
+    expect(result?.id).toBeDefined();
+    expect(result?.hops).toBeDefined();
+    expect(result?.hops.length).toBe(1);
+    expect(result?.hops[0].dex).toBe('V2');
+    expect(result?.hops[0].tokenIn).toBe(WETH_ADDRESS);
+    expect(result?.hops[0].tokenOut).toBe(path[1]);
+    expect(result?.amountIn).toBe(mockTx.value);
+    expect(result?.tokenIn).toBe(WETH_ADDRESS);
+    expect(result?.tokenOut).toBe(path[1]);
+    expect(result?.source).toBe('mempool');
   });
 
   test('returns null for non-swap transaction', async () => {

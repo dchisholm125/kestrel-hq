@@ -1,5 +1,5 @@
 import { Contract, Interface, Provider, TransactionRequest, ZeroAddress } from 'ethers';
-import { Opportunity, DEX_ROUTERS, WETH_ADDRESS } from './OpportunityIdentifier';
+import { Opportunity, CandidateArb, DEX_ROUTERS, WETH_ADDRESS } from './OpportunityIdentifier';
 
 // Uniswap V2 constants
 const UNISWAP_V2_FACTORY = '0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f';
@@ -34,6 +34,48 @@ export class TradeCrafter {
     // balanceOverrides map key format: `${tokenAddress.toLowerCase()}:${owner.toLowerCase()}` => balance
     private balanceOverrides?: Record<string, bigint>
   ) {}
+
+  /**
+   * Convert CandidateArb to legacy Opportunity format for backward compatibility
+   */
+  private candidateArbToOpportunity(candidate: CandidateArb): Opportunity {
+    // Reconstruct path from hops
+    const path = [candidate.tokenIn];
+    for (const hop of candidate.hops) {
+      path.push(hop.tokenOut);
+    }
+
+    // Map DEX type back to string
+    let dex = 'uniswap_v2'; // default
+    if (candidate.hops.length > 0) {
+      const firstHop = candidate.hops[0];
+      if (firstHop.dex === 'V3') {
+        dex = 'uniswap_v3';
+      } else if (firstHop.router.toLowerCase().includes('sushi')) {
+        dex = 'sushiswap';
+      } else if (firstHop.router.toLowerCase().includes('curve')) {
+        dex = 'curve_v2';
+      }
+    }
+
+    return {
+      hash: candidate.id, // Use candidate ID as hash
+      tokenIn: candidate.tokenIn,
+      tokenOut: candidate.tokenOut,
+      path,
+      amountInWei: candidate.amountIn,
+      functionSelector: '0x7ff36ab5', // swapExactETHForTokens
+      dex
+    };
+  }
+
+  /**
+   * Craft a backrun transaction from a CandidateArb
+   */
+  public async craftBackrunFromCandidate(candidate: CandidateArb, executorAddress?: string, options?: { amountInWei?: bigint }): Promise<TransactionRequest | null> {
+    const opportunity = this.candidateArbToOpportunity(candidate);
+    return this.craftBackrun(opportunity, executorAddress, options);
+  }
 
   /**
    * Craft a reverse (token -> WETH) swap for a detected ETH->Token opportunity.

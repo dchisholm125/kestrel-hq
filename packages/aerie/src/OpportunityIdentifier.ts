@@ -10,6 +10,45 @@ export interface Opportunity {
   dex: string; // Added to identify the DEX
 }
 
+export type CandidateArb = {
+  id: string;                       // hash of route + amounts + pools
+  hops: Array<{
+    dex: 'V2'|'V3';
+    router: string;
+    tokenIn: string;
+    tokenOut: string;
+    fee?: number;                   // V3 fee tier bps
+    pool?: string;                  // for direct pool calls
+  }>;
+  amountIn: bigint;                 // in tokenIn units
+  tokenIn: string;                  // e.g. WETH
+  tokenOut: string;                 // should end == tokenIn for triangular
+  chainId: number;
+  source: 'mempool'|'poller'|'sim';
+}
+
+/**
+ * Example CandidateArb structure:
+ * {
+ *   id: "a1b2c3d4e5f6",
+ *   hops: [
+ *     {
+ *       dex: "V2",
+ *       router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+ *       tokenIn: "0xC02aaA39b223FE8D0A0E5C4F27eAD9083C756Cc2",
+ *       tokenOut: "0xA0b86a33E6441e88C5F2712C3E9b74F5b6b6b6b6",
+ *       fee: undefined,
+ *       pool: undefined
+ *     }
+ *   ],
+ *   amountIn: 1000000000000000000n,  // 1 ETH in wei
+ *   tokenIn: "0xC02aaA39b223FE8D0A0E5C4F27eAD9083C756Cc2",   // WETH
+ *   tokenOut: "0xA0b86a33E6441e88C5F2712C3E9b74F5b6b6b6b6", // USDC
+ *   chainId: 1,
+ *   source: "mempool"
+ * }
+ */
+
 // DEX Router Addresses (Mainnet)
 export const DEX_ROUTERS = {
   UNISWAP_V2: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'.toLowerCase(),
@@ -36,11 +75,61 @@ export class OpportunityIdentifier {
   }
 
   /**
+   * Convert legacy Opportunity to new CandidateArb format
+   */
+  private async opportunityToCandidateArb(opportunity: Opportunity, chainId: number = 1): Promise<CandidateArb> {
+    // Generate ID as hash of route + amounts + pools
+    const routeStr = opportunity.path.join('-');
+    const idInput = `${routeStr}-${opportunity.amountInWei}-${opportunity.dex}`;
+    const crypto = await import('crypto');
+    const id = crypto.createHash('sha256').update(idInput).digest('hex').substring(0, 16);
+
+    // Convert path to hops format
+    const hops = opportunity.path.slice(0, -1).map((tokenIn, index) => {
+      const tokenOut = opportunity.path[index + 1];
+      return {
+        dex: opportunity.dex.includes('v2') ? 'V2' as const : 'V3' as const,
+        router: this.getRouterForDex(opportunity.dex),
+        tokenIn: tokenIn.toLowerCase(),
+        tokenOut: tokenOut.toLowerCase(),
+        fee: opportunity.dex.includes('v3') ? 3000 : undefined, // Default 0.3% for V3
+        pool: undefined // Not available in legacy format
+      };
+    });
+
+    return {
+      id,
+      hops,
+      amountIn: opportunity.amountInWei,
+      tokenIn: opportunity.tokenIn.toLowerCase(),
+      tokenOut: opportunity.tokenOut.toLowerCase(),
+      chainId,
+      source: 'mempool' as const
+    };
+  }
+
+  /**
+   * Get router address for a given DEX
+   */
+  private getRouterForDex(dex: string): string {
+    switch (dex.toLowerCase()) {
+      case 'uniswap_v2':
+        return DEX_ROUTERS.UNISWAP_V2;
+      case 'sushiswap':
+        return DEX_ROUTERS.SUSHISWAP;
+      case 'curve_v2':
+        return DEX_ROUTERS.CURVE_V2;
+      default:
+        return DEX_ROUTERS.UNISWAP_V2; // fallback
+    }
+  }
+
+  /**
    * Analyze a pending transaction hash for DEX swap opportunities.
    * Supports Uniswap V2, Sushiswap, and Curve V2 (MVP).
-   * Returns an Opportunity object or null if not relevant / undecodable.
+   * Returns a CandidateArb object or null if not relevant / undecodable.
    */
-  public async analyzeTransaction(txHash: string): Promise<Opportunity | null> {
+  public async analyzeTransaction(txHash: string): Promise<CandidateArb | null> {
     try {
       const tx: TransactionResponse | null = await this.provider.getTransaction(txHash);
       if (!tx) return null; // not yet available or dropped
@@ -85,7 +174,7 @@ export class OpportunityIdentifier {
 
       const amountInWei = tx.value ?? 0n; // ETH sent with the transaction
 
-      return {
+      const legacyOpportunity = {
         hash: tx.hash,
         tokenIn,
         tokenOut,
@@ -94,6 +183,9 @@ export class OpportunityIdentifier {
         functionSelector: SWAP_EXACT_ETH_FOR_TOKENS_SELECTOR,
         dex
       };
+
+      // Convert to new CandidateArb format
+      return await this.opportunityToCandidateArb(legacyOpportunity, 1); // Default to mainnet
     } catch (err) {
       // Swallow errors for robustness, log optionally
       // console.debug('[OpportunityIdentifier] analyze error', err);

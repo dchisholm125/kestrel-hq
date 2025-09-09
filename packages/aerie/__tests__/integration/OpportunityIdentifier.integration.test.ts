@@ -142,15 +142,19 @@ describe('OpportunityIdentifier deterministic Uniswap V2 swap (integration)', ()
     expectedHash = swapTx.hash;
   console.log('[integration][OpportunityIdentifier] swap tx sent hash', expectedHash);
 
-    const opportunity = await opportunityPromise;
-  console.log('[integration][OpportunityIdentifier] opportunity detected', opportunity);
+    const candidate = await opportunityPromise;
+  console.log('[integration][OpportunityIdentifier] candidate detected', candidate);
 
-    expect(opportunity).toBeTruthy();
-    expect(opportunity.hash).toBe(expectedHash);
-    expect(opportunity.path.map((p: string) => p.toLowerCase())).toEqual(path.map(p => p.toLowerCase()));
-    expect(opportunity.tokenIn.toLowerCase()).toBe(WETH_ADDRESS.toLowerCase());
-    expect(opportunity.tokenOut.toLowerCase()).toBe(USDC.toLowerCase());
+    expect(candidate).toBeTruthy();
+    expect(candidate?.id).toBeDefined();
+    expect(candidate?.hops).toBeDefined();
+    expect(candidate?.hops.length).toBe(1);
+    expect(candidate?.hops[0].tokenIn.toLowerCase()).toBe(WETH_ADDRESS.toLowerCase());
+    expect(candidate?.hops[0].tokenOut.toLowerCase()).toBe(USDC.toLowerCase());
+    expect(candidate?.tokenIn.toLowerCase()).toBe(WETH_ADDRESS.toLowerCase());
+    expect(candidate?.tokenOut.toLowerCase()).toBe(USDC.toLowerCase());
     // value used in tx
-    expect(opportunity.amountInWei).toBe(parseEther(ethToSwap));
+    expect(candidate?.amountIn).toBe(parseEther(ethToSwap));
+    expect(candidate?.source).toBe('mempool');
   });
 });
